@@ -1,0 +1,145 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  password    String
+  avatar      String?
+  role        UserRole @default(AGENT)
+  status      String   @default("active")
+  teamId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastLoginAt DateTime?
+
+  team         Team?          @relation(fields: [teamId], references: [id])
+  leads        Lead[]         @relation("AssignedLeads")
+  activities   LeadActivity[]
+  conversations AIConversation[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  AGENT
+  VIEWER
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members   User[]
+
+  @@map("teams")
+}
+
+model Lead {
+  id            String    @id @default(cuid())
+  name          String
+  company       String?
+  phone         String?
+  whatsapp      String?
+  email         String?
+  status        String    @default("new")
+  source        String    @default("organic")
+  priority      String    @default("medium")
+  temperature   String    @default("warm")
+  value         Float?
+  tags          String[]
+  notes         String?
+  aiScore       Int?
+  aiInsights    String?
+  assignedTo    String?
+  campaignId    String?
+  lastInteraction DateTime?
+  nextFollowUp  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  assignedUser User?          @relation("AssignedLeads", fields: [assignedTo], references: [id])
+  activities   LeadActivity[]
+
+  @@index([status])
+  @@index([assignedTo])
+  @@index([createdAt])
+  @@map("leads")
+}
+
+model LeadActivity {
+  id          String   @id @default(cuid())
+  leadId      String
+  type        String
+  description String
+  userId      String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([leadId])
+  @@map("lead_activities")
+}
+
+model Campaign {
+  id           String   @id @default(cuid())
+  name         String
+  platform     String
+  status       String   @default("draft")
+  objective    String
+  dailyBudget  Float?
+  totalBudget  Float?
+  spentBudget  Float    @default(0)
+  currency     String   @default("BRL")
+  startDate    DateTime
+  endDate      DateTime?
+  externalId   String?
+  createdBy    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([platform])
+  @@index([status])
+  @@map("campaigns")
+}
+
+model AIConversation {
+  id        String   @id @default(cuid())
+  title     String
+  userId    String
+  model     String   @default("gpt-4o")
+  context   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User       @relation(fields: [userId], references: [id])
+  messages AIMessage[]
+
+  @@map("ai_conversations")
+}
+
+model AIMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String
+  content        String
+  createdAt      DateTime @default(now())
+
+  conversation AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("ai_messages")
+}
