@@ -1,4 +1,4 @@
-export const APP_NAME = 'Startsette CRM'
+export const APP_NAME = 'Startsette'
 export const APP_VERSION = '1.0.0'
 
 export const PAGINATION = {

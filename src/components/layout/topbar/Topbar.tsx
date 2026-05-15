@@ -1,16 +1,41 @@
 'use client'
 
+import { usePathname } from 'next/navigation'
 import { Bell, Search } from 'lucide-react'
 import { useAuthStore } from '@/store/auth.store'
-import { cn } from '@/lib/utils/cn'
+
+const pageTitles: Record<string, string> = {
+  '/dashboard': 'Dashboard',
+  '/leads': 'Leads',
+  '/campaigns': 'Campanhas',
+  '/automations': 'Automações',
+  '/ai': 'IA',
+  '/whatsapp': 'WhatsApp',
+  '/analytics': 'Analytics',
+  '/finance': 'Financeiro',
+  '/calendar': 'Calendário',
+  '/reports': 'Relatórios',
+  '/team': 'Equipe',
+  '/settings': 'Configurações',
+}
 
 export function Topbar() {
   const { user } = useAuthStore()
+  const pathname = usePathname()
+
+  const pageTitle = pageTitles[pathname] ?? pageTitles[Object.keys(pageTitles).find(k => pathname.startsWith(k + '/')) ?? ''] ?? 'Startsette'
 
   return (
     <header className="h-14 flex items-center justify-between px-6 border-b border-white/8 bg-[#070d1a]/80 backdrop-blur-md shrink-0">
-      {/* Search */}
-      <div className="flex items-center gap-2.5 flex-1 max-w-sm">
+      {/* Left: page title */}
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-semibold text-white">{pageTitle}</span>
+        <span className="text-slate-700 text-sm">|</span>
+        <span className="text-xs text-slate-500">Startsette</span>
+      </div>
+
+      {/* Center: Search */}
+      <div className="flex items-center gap-2.5 flex-1 max-w-sm mx-6">
         <div className="flex items-center gap-2.5 w-full h-9 rounded-xl bg-white/5 border border-white/8 px-3 hover:border-white/15 transition-colors">
           <Search className="w-3.5 h-3.5 text-slate-500 shrink-0" />
           <input
