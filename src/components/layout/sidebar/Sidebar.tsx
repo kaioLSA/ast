@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, Users, Megaphone, Zap, Bot, MessageCircle,
+  LayoutDashboard, Users, MessageCircle,
   BarChart3, DollarSign, Calendar, FileText, Settings, UsersRound,
   ChevronLeft, ChevronRight, LogOut,
 } from 'lucide-react'
@@ -17,9 +17,6 @@ import { routes } from '@/config/routes'
 const navItems = [
   { label: 'Dashboard', href: routes.dashboard, icon: LayoutDashboard, group: 'main' },
   { label: 'Leads', href: routes.leads.root, icon: Users, group: 'main' },
-  { label: 'Campanhas', href: routes.campaigns.root, icon: Megaphone, group: 'main' },
-  { label: 'Automações', href: routes.automations, icon: Zap, group: 'main' },
-  { label: 'IA', href: routes.ai, icon: Bot, group: 'tools' },
   { label: 'WhatsApp', href: routes.whatsapp, icon: MessageCircle, group: 'tools' },
   { label: 'Analytics', href: routes.analytics, icon: BarChart3, group: 'tools' },
   { label: 'Financeiro', href: routes.finance.root, icon: DollarSign, group: 'tools' },

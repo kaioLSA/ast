@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import { Button } from '@/components/ui/button'
 import { User, Bell, Plug, Shield, CreditCard, Check, X } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
+import { useAuthStore } from '@/store/auth.store'
 
 const TABS = [
   { key: 'profile', label: 'Perfil', icon: User },
@@ -35,13 +36,14 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
 }
 
 function ProfileTab() {
+  const { user } = useAuthStore()
   const [form, setForm] = useState({
-    name: 'Admin Startsette',
-    email: 'admin@startsette.com',
-    role: 'Administrador',
+    name: user?.name ?? '',
+    email: user?.email ?? '',
+    role: user?.role === 'admin' ? 'Administrador' : user?.role === 'manager' ? 'Gerente' : 'Agente',
     company: 'Startsette',
-    phone: '+55 11 99999-0000',
-    bio: 'Administrador do sistema CRM Startsette.',
+    phone: '',
+    bio: '',
   })
 
   return (

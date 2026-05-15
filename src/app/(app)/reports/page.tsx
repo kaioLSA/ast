@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { usePageTitle } from '@/hooks/usePageTitle'
+import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import { Plus, FileText, BarChart2, DollarSign, Users, MessageSquare, Download, Eye, X, CheckCircle2, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
@@ -36,6 +37,8 @@ function Modal({ open, onClose, title, wide, children }: { open: boolean; onClos
 
 export default function ReportsPage() {
   usePageTitle('Relatórios')
+  const { user } = useAuthStore()
+  const activeReports = user?.teamId === 'gabriel-team' ? [] : reports
   const [previewReport, setPreviewReport] = useState<typeof reports[0] | null>(null)
   const [generateModal, setGenerateModal] = useState(false)
   const [downloading, setDownloading] = useState<string | null>(null)
@@ -71,7 +74,10 @@ export default function ReportsPage() {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        {reports.map(r => {
+        {activeReports.length === 0 && (
+          <p className="text-sm text-slate-500 text-center py-12">Nenhum relatório ainda.</p>
+        )}
+        {activeReports.map(r => {
           const Icon = r.icon
           const isDown = downloading === r.id
           const isDone = downloaded === r.id

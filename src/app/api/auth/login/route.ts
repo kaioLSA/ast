@@ -46,6 +46,29 @@ const DEMO_USERS = [
       updatedAt: new Date().toISOString(),
     },
   },
+  {
+    email: 'gabriel@startsette.com',
+    password: 'adm123',
+    user: {
+      id: 'gabriel',
+      name: 'Gabriel',
+      email: 'gabriel@startsette.com',
+      avatar: null,
+      role: 'admin' as const,
+      status: 'active' as const,
+      permissions: [
+        'leads:read','leads:write','leads:delete',
+        'finance:read','finance:write',
+        'team:read','team:write','team:delete',
+        'settings:read','settings:write',
+        'analytics:read',
+        'whatsapp:read','whatsapp:write',
+      ],
+      teamId: 'gabriel-team',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  },
 ]
 
 export async function POST(request: NextRequest) {

@@ -11,15 +11,6 @@ export const routes = {
     detail: (id: string) => `/leads/${id}`,
     kanban: '/leads/kanban',
   },
-  campaigns: {
-    root: '/campaigns',
-    detail: (id: string) => `/campaigns/${id}`,
-    meta: '/campaigns/meta-ads',
-    google: '/campaigns/google-ads',
-    tiktok: '/campaigns/tiktok-ads',
-  },
-  automations: '/automations',
-  ai: '/ai',
   whatsapp: '/whatsapp',
   analytics: '/analytics',
   finance: {
@@ -50,9 +41,6 @@ export const publicRoutes = [
 export const protectedRoutes = [
   routes.dashboard,
   routes.leads.root,
-  routes.campaigns.root,
-  routes.automations,
-  routes.ai,
   routes.whatsapp,
   routes.analytics,
   routes.finance.root,

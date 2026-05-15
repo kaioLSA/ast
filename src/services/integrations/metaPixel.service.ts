@@ -1,27 +1,20 @@
-type PixelEvent =
-  | 'PageView'
-  | 'Lead'
-  | 'Purchase'
-  | 'InitiateCheckout'
-  | 'AddToCart'
-  | 'ViewContent'
-  | 'CompleteRegistration'
-
-declare global {
-  interface Window {
-    fbq?: (method: string, event: string, params?: object) => void
-  }
+type MetaEventPayload = {
+  eventName: 'Lead' | 'CompleteRegistration' | 'Purchase' | 'Contact'
+  email?: string
+  phone?: string
+  leadId?: string
+  value?: number
+  currency?: string
 }
 
-export function trackPixelEvent(event: PixelEvent, params?: object): void {
-  if (typeof window !== 'undefined' && window.fbq) {
-    window.fbq('track', event, params)
+export async function sendMetaEvent(payload: MetaEventPayload): Promise<void> {
+  try {
+    await fetch('/api/meta/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  } catch (err) {
+    console.error('[Meta Pixel] Falha ao enviar evento:', err)
   }
-}
-
-export function initMetaPixel(pixelId: string): void {
-  if (typeof window === 'undefined') return
-  // Meta Pixel init - injected via script tag in layout
-  window.fbq?.('init', pixelId)
-  window.fbq?.('track', 'PageView')
 }

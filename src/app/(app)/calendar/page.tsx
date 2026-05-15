@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { usePageTitle } from '@/hooks/usePageTitle'
+import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import { Plus, ChevronLeft, ChevronRight, X, CheckCircle2, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
@@ -62,10 +63,11 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
 
 export default function CalendarPage() {
   usePageTitle('Calendário')
+  const { user } = useAuthStore()
   const today = new Date()
-  const [year, setYear] = useState(2026)
-  const [month, setMonth] = useState(4)
-  const [events, setEvents] = useState<CalEvent[]>(initialEvents)
+  const [year, setYear] = useState(today.getFullYear())
+  const [month, setMonth] = useState(today.getMonth())
+  const [events, setEvents] = useState<CalEvent[]>(user?.teamId === 'gabriel-team' ? [] : initialEvents)
   const [createModal, setCreateModal] = useState(false)
   const [viewEvent, setViewEvent] = useState<CalEvent | null>(null)
   const [form, setForm] = useState({ label: '', time: '10:00', color: colorOptions[0].value, day: '', month: String(4), year: String(2026), description: '' })

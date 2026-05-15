@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { usePageTitle } from '@/hooks/usePageTitle'
+import { useAuthStore } from '@/store/auth.store'
+import { sendMetaEvent } from '@/services/integrations/metaPixel.service'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import { Plus, Eye, MessageCircle, Search, X, CheckCircle2, Phone, Mail, Building2 } from 'lucide-react'
 import { mockLeads } from '@/services/mocks/leads.mock'
@@ -82,7 +84,8 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
 
 export default function LeadsPage() {
   usePageTitle('Leads')
-  const [leads, setLeads] = useState(initial)
+  const { user } = useAuthStore()
+  const [leads, setLeads] = useState(user?.teamId === 'gabriel-team' ? [] : initial)
   const [activeTab, setActiveTab] = useState('all')
   const [search, setSearch] = useState('')
   const [viewLead, setViewLead] = useState<Lead | null>(null)
@@ -111,6 +114,13 @@ export default function LeadsPage() {
       aiScore: Math.floor(Math.random() * 40 + 40),
     }
     setLeads(prev => [newLead, ...prev])
+    sendMetaEvent({
+      eventName: 'Lead',
+      email: form.email,
+      phone: form.phone,
+      leadId: newLead.id,
+      value: Number(form.value) || undefined,
+    })
     setSaved(true)
     setTimeout(() => {
       setCreateModal(false)

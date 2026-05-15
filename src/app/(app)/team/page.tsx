@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { usePageTitle } from '@/hooks/usePageTitle'
+import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import { Plus, Mail, DollarSign, Target, X, CheckCircle2, Phone, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
@@ -46,13 +47,15 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
 
 export default function TeamPage() {
   usePageTitle('Equipe')
+  const { user } = useAuthStore()
+  const activeMembers = user?.teamId === 'gabriel-team' ? [] : members
   const [activeTab, setActiveTab] = useState('all')
   const [profileMember, setProfileMember] = useState<typeof members[0] | null>(null)
   const [inviteModal, setInviteModal] = useState(false)
   const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: roles[2], department: departments[1] })
   const [invited, setInvited] = useState(false)
 
-  const filtered = members.filter(m => activeTab === 'all' || m.department === activeTab)
+  const filtered = activeMembers.filter(m => activeTab === 'all' || m.department === activeTab)
 
   const handleInvite = () => {
     if (!inviteForm.email) return

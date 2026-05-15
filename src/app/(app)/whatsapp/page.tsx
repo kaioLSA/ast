@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { usePageTitle } from '@/hooks/usePageTitle'
+import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import { Send, Search } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
@@ -136,15 +137,17 @@ const conversations = [
 
 export default function WhatsappPage() {
   usePageTitle('WhatsApp')
-  const [selectedId, setSelectedId] = useState('1')
+  const { user } = useAuthStore()
+  const activeConversations = user?.teamId === 'gabriel-team' ? [] : conversations
+  const [selectedId, setSelectedId] = useState(activeConversations[0]?.id ?? '')
   const [inputs, setInputs] = useState<Record<string, string>>({})
   const [msgMap, setMsgMap] = useState<Record<string, Msg[]>>(
-    Object.fromEntries(conversations.map(c => [c.id, c.messages])),
+    Object.fromEntries(activeConversations.map(c => [c.id, c.messages])),
   )
   const [search, setSearch] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  const conv = conversations.find(c => c.id === selectedId)!
+  const conv = activeConversations.find(c => c.id === selectedId)
   const msgs = msgMap[selectedId] ?? []
 
   useEffect(() => {
@@ -164,7 +167,7 @@ export default function WhatsappPage() {
     setInputs(prev => ({ ...prev, [selectedId]: '' }))
   }
 
-  const filtered = conversations.filter(c =>
+  const filtered = activeConversations.filter(c =>
     !search || c.name.toLowerCase().includes(search.toLowerCase()),
   )
 
@@ -222,6 +225,11 @@ export default function WhatsappPage() {
 
         {/* Active conversation */}
         <div className="flex-1 flex flex-col">
+          {!conv ? (
+            <div className="flex-1 flex items-center justify-center">
+              <p className="text-slate-500 text-sm">Nenhuma conversa ainda.</p>
+            </div>
+          ) : (<>
           {/* Contact header */}
           <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/10">
             <div className={cn('w-9 h-9 rounded-full bg-gradient-to-br flex items-center justify-center text-xs font-bold text-white', conv.color)}>
@@ -272,6 +280,7 @@ export default function WhatsappPage() {
               </button>
             </div>
           </div>
+          </>)}
         </div>
       </div>
     </div>

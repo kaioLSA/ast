@@ -27,7 +27,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-10">
           <div className="flex justify-center mb-2">
-            <Image src="/startsette.png" alt="Startsette" width={180} height={60} className="object-contain" />
+            <Image src="/startsette.png" alt="Startsette" width={200} height={50} unoptimized className="object-contain" />
           </div>
           <p className="text-slate-400 mt-2 text-sm">Plataforma inteligente de gestão de vendas</p>
         </div>
