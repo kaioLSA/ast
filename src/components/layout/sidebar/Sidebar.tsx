@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, Megaphone, Zap, Bot, MessageCircle,
@@ -44,15 +45,12 @@ export function Sidebar() {
       {/* Logo */}
       <div className={cn(
         'flex items-center h-16 border-b border-white/8',
-        isCollapsed ? 'justify-center px-0' : 'px-5 gap-3',
+        isCollapsed ? 'justify-center px-0' : 'px-5',
       )}>
-        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 shrink-0 shadow-[0_0_15px_rgba(59,130,246,0.4)]">
-          <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-white" stroke="currentColor" strokeWidth={2.5}>
-            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeLinejoin="round" strokeLinecap="round" />
-          </svg>
-        </div>
-        {!isCollapsed && (
-          <span className="font-bold text-white text-sm tracking-wide truncate">Startsette CRM</span>
+        {isCollapsed ? (
+          <Image src="/st.png" alt="Startsette" width={32} height={32} className="object-contain" />
+        ) : (
+          <Image src="/startsette.png" alt="Startsette" width={120} height={32} className="object-contain" />
         )}
       </div>
 

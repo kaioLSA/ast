@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     template: `%s | ${siteConfig.name}`,
   },
   description: siteConfig.description,
-  icons: { icon: '/logo/favicon.ico' },
+  icons: { icon: '/st.png', apple: '/st.png' },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

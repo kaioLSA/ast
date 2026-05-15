@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Image from 'next/image'
 import { LoginForm } from '@/components/ui/auth/LoginForm'
 
 export const metadata: Metadata = { title: 'Entrar — Startsette CRM' }
@@ -25,14 +26,9 @@ export default function LoginPage() {
       <div className="relative z-10 w-full max-w-md px-4">
         {/* Logo */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-400 shadow-[0_0_40px_rgba(59,130,246,0.5)] mb-5">
-            <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8 text-white" stroke="currentColor" strokeWidth={2}>
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeLinejoin="round" strokeLinecap="round" />
-            </svg>
+          <div className="flex justify-center mb-2">
+            <Image src="/startsette.png" alt="Startsette" width={180} height={60} className="object-contain" />
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">
-            Startsette <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">CRM</span>
-          </h1>
           <p className="text-slate-400 mt-2 text-sm">Plataforma inteligente de gestão de vendas</p>
         </div>
 
