@@ -31,33 +31,45 @@ export function useRealtime<T extends { id: string }>(
   useEffect(() => {
     if (!companyId) return
 
-    const channel = supabase
-      .channel(`${table}:${companyId}`)
-      .on(
-        // @ts-expect-error – overload typing is loose but works at runtime
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table,
-          filter: `company_id=eq.${companyId}`,
-        },
-        (payload: { eventType: RealtimeEvent; new: T; old: T }) => {
-          if (payload.eventType === 'INSERT') {
-            // Skip if we already have this id — means current user did optimistic update
-            const alreadyExists = existingIds?.includes(payload.new?.id)
-            if (!alreadyExists && onInsert) onInsert(payload.new)
-          } else if (payload.eventType === 'UPDATE') {
-            if (onUpdate) onUpdate(payload.new)
-          } else if (payload.eventType === 'DELETE') {
-            if (onDelete) onDelete((payload.old as { id: string })?.id)
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
+    try {
+      channel = supabase
+        .channel(`${table}:${companyId}`)
+        .on(
+          // @ts-expect-error – overload typing is loose but works at runtime
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table,
+            filter: `company_id=eq.${companyId}`,
+          },
+          (payload: { eventType: RealtimeEvent; new: T; old: T }) => {
+            try {
+              if (payload.eventType === 'INSERT') {
+                // Skip if we already have this id — means current user did optimistic update
+                const alreadyExists = existingIds?.includes(payload.new?.id)
+                if (!alreadyExists && onInsert) onInsert(payload.new)
+              } else if (payload.eventType === 'UPDATE') {
+                if (onUpdate) onUpdate(payload.new)
+              } else if (payload.eventType === 'DELETE') {
+                if (onDelete) onDelete((payload.old as { id: string })?.id)
+              }
+            } catch {
+              // ignore payload processing errors
+            }
           }
-        }
-      )
-      .subscribe()
+        )
+        .subscribe()
+    } catch {
+      // Realtime subscription failed (e.g. Supabase unreachable) — silently continue without live updates
+    }
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        try { supabase.removeChannel(channel) } catch { /* ignore */ }
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [table, companyId])

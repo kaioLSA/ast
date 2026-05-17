@@ -80,16 +80,16 @@ export default function ClientsPage() {
         if (Array.isArray(data)) {
           setClients(data.map(c => ({
             id: c.id,
-            name: c.name,
+            name: c.name || '',
             company: c.company_name || '—',
             email: c.email || '',
             phone: c.phone || '',
-            status: c.status,
+            status: (['active', 'inactive', 'prospect'].includes(c.status) ? c.status : 'prospect') as Client['status'],
             value: Number(c.value) || 0,
             deals: c.deals ?? 0,
             score: c.score ?? 70,
             since: c.since || '',
-            avatar: c.avatar || c.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
+            avatar: c.avatar || (c.name ? c.name.split(' ').map((w: string) => w[0] ?? '').join('').slice(0, 2).toUpperCase() : '?'),
             gradient: c.gradient || gradients[0],
           })))
         }
@@ -104,16 +104,16 @@ export default function ClientsPage() {
       existingIds: clients.map(c => c.id),
       onInsert: (row) => setClients(prev => [{
         id: row.id,
-        name: row.name,
+        name: row.name || '',
         company: row.company_name || '—',
         email: row.email || '',
         phone: row.phone || '',
-        status: row.status,
+        status: (['active', 'inactive', 'prospect'].includes(row.status) ? row.status : 'prospect') as Client['status'],
         value: Number(row.value) || 0,
         deals: row.deals ?? 0,
         score: row.score ?? 70,
         since: row.since || '',
-        avatar: row.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
+        avatar: row.name ? row.name.split(' ').map((w: string) => w[0] ?? '').join('').slice(0, 2).toUpperCase() : '?',
         gradient: row.gradient || gradients[0],
       }, ...prev]),
       onUpdate: (row) => setClients(prev => prev.map(c => c.id === row.id

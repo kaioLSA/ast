@@ -116,9 +116,11 @@ export async function POST(request: NextRequest) {
     },
   })
 
+  // secure: only enforce over HTTPS — when APP_URL starts with https (after SSL is set up)
+  const isHttps = (process.env.NEXT_PUBLIC_APP_URL ?? '').startsWith('https')
   response.cookies.set('auth-token', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isHttps,
     sameSite: 'lax',
     path: '/',
     // Sem maxAge = session cookie: apagado ao fechar o navegador
