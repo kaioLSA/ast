@@ -1,0 +1,12 @@
+services:
+  crm:
+    build: .
+    restart: unless-stopped
+    env_file: .env.production
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.crm-startsette.rule=Host(`crm.startsette.com`)
+      - traefik.http.routers.crm-startsette.entrypoints=websecure
+      - traefik.http.routers.crm-startsette.tls=true
+      - traefik.http.routers.crm-startsette.tls.certresolver=letsencrypt
+      - traefik.http.services.crm-startsette.loadbalancer.server.port=3000

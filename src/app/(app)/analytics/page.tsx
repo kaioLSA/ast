@@ -1,6 +1,7 @@
 'use client'
 
 import { usePageTitle } from '@/hooks/usePageTitle'
+import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import { TrendingUp, TrendingDown, Users, Clock, MousePointer, BarChart2 } from 'lucide-react'
 import {
@@ -80,8 +81,19 @@ const tooltipStyle = {
   fontSize: 12,
 }
 
+const emptyMetricCards = metricCards.map(m => ({ ...m, value: '0', change: '0%' }))
+const emptyLeadsData = Array.from({ length: 30 }, (_, i) => ({ day: `${i + 1}/05`, leads: 0, conversions: 0 }))
+const emptyRevenueData = revenueData.map(d => ({ ...d, receita: 0, despesas: 0 }))
+const emptyPieData = pieData.map(d => ({ ...d, value: 0 }))
+
 export default function AnalyticsPage() {
   usePageTitle('Analytics')
+  const { user } = useAuthStore()
+  const isEmpty = !user?.isDemo
+  const activeMetrics = isEmpty ? emptyMetricCards : metricCards
+  const activeLeads = isEmpty ? emptyLeadsData : leadsData
+  const activeRevenue = isEmpty ? emptyRevenueData : revenueData
+  const activePie = isEmpty ? emptyPieData : pieData
   return (
     <div className="space-y-6">
       <PageHeader
@@ -92,7 +104,7 @@ export default function AnalyticsPage() {
 
       {/* Metric cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {metricCards.map(m => {
+        {activeMetrics.map(m => {
           const Icon = m.icon
           return (
             <div key={m.label} className={cn('rounded-2xl border bg-gradient-to-br p-5', m.color)}>
@@ -117,7 +129,7 @@ export default function AnalyticsPage() {
         <div className="lg:col-span-2 rounded-2xl border border-white/10 bg-white/3 p-6 backdrop-blur-sm">
           <h2 className="text-lg font-semibold text-white mb-5">Leads por Dia — Maio 2026</h2>
           <ResponsiveContainer width="100%" height={250}>
-            <AreaChart data={leadsData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+            <AreaChart data={activeLeads} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="leadsGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
@@ -143,8 +155,8 @@ export default function AnalyticsPage() {
           <h2 className="text-lg font-semibold text-white mb-5">Origem dos Leads</h2>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
-              <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={3} dataKey="value">
-                {pieData.map((entry, i) => (
+              <Pie data={activePie} cx="50%" cy="50%" innerRadius={55} outerRadius={80} paddingAngle={3} dataKey="value">
+                {activePie.map((entry, i) => (
                   <Cell key={i} fill={entry.color} />
                 ))}
               </Pie>
@@ -152,7 +164,7 @@ export default function AnalyticsPage() {
             </PieChart>
           </ResponsiveContainer>
           <div className="space-y-2 mt-3">
-            {pieData.map(d => (
+            {activePie.map(d => (
               <div key={d.name} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
@@ -169,7 +181,7 @@ export default function AnalyticsPage() {
       <div className="rounded-2xl border border-white/10 bg-white/3 p-6 backdrop-blur-sm">
         <h2 className="text-lg font-semibold text-white mb-5">Receita vs Despesas — Jan a Jun 2026</h2>
         <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={revenueData} margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
+          <BarChart data={activeRevenue} margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
             <XAxis dataKey="month" tick={{ fill: '#64748b', fontSize: 12 }} />
             <YAxis tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={v => `R$${(v / 1000).toFixed(0)}K`} />

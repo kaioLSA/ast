@@ -1,10 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { usePageTitle } from '@/hooks/usePageTitle'
+import { useAuthStore } from '@/store/auth.store'
+import { sendMetaEvent } from '@/services/integrations/metaPixel.service'
+import { useRealtime } from '@/hooks/useRealtime'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
-import { Plus, Eye, MessageCircle, Search, X, CheckCircle2, Phone, Mail, Building2 } from 'lucide-react'
-import { mockLeads } from '@/services/mocks/leads.mock'
+import { Plus, Eye, MessageCircle, Search, X, CheckCircle2, Phone, Mail, Building2, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
 type Lead = {
@@ -19,24 +22,6 @@ type Lead = {
   email?: string
   phone?: string
 }
-
-const initial: Lead[] = [
-  ...mockLeads.map(l => ({
-    id: l.id, name: l.name, company: l.company ?? '—', status: l.status,
-    source: l.source, aiScore: l.aiScore ?? 0, value: l.value ?? 0,
-    temperature: l.temperature, email: l.contact?.email, phone: l.contact?.phone,
-  })),
-  { id: '6', name: 'Fernanda Lima', company: 'Moda Express', status: 'new', source: 'meta_ads', aiScore: 58, value: 8000, temperature: 'warm', email: 'fernanda@modaexpress.com', phone: '+55 11 97777-0006' },
-  { id: '7', name: 'Ricardo Torres', company: 'Construtora RJ', status: 'contacted', source: 'google_ads', aiScore: 71, value: 42000, temperature: 'warm', email: 'ricardo@construtorarj.com', phone: '+55 21 96666-0007' },
-  { id: '8', name: 'Patrícia Neves', company: 'Clínica Saúde+', status: 'qualified', source: 'organic', aiScore: 83, value: 15000, temperature: 'hot', email: 'patricia@clinicasaude.com', phone: '+55 11 95555-0008' },
-  { id: '9', name: 'Thiago Carvalho', company: 'LogTech', status: 'proposal', source: 'referral', aiScore: 89, value: 31000, temperature: 'hot', email: 'thiago@logtech.com.br', phone: '+55 31 94444-0009' },
-  { id: '10', name: 'Camila Rocha', company: 'EduPlus', status: 'negotiation', source: 'whatsapp', aiScore: 77, value: 22000, temperature: 'hot', email: 'camila@eduplus.com', phone: '+55 41 93333-0010' },
-  { id: '11', name: 'Gustavo Pires', company: 'FinTech BR', status: 'won', source: 'meta_ads', aiScore: 96, value: 55000, temperature: 'hot', email: 'gustavo@fintechbr.com', phone: '+55 11 92222-0011' },
-  { id: '12', name: 'Larissa Duarte', company: 'AutoCenter SP', status: 'lost', source: 'google_ads', aiScore: 42, value: 9000, temperature: 'cold', email: 'larissa@autocentersp.com', phone: '+55 11 91111-0012' },
-  { id: '13', name: 'Marcos Vieira', company: 'Distribuidora MV', status: 'new', source: 'organic', aiScore: 61, value: 17000, temperature: 'warm', email: 'marcos@distribuidoramv.com', phone: '+55 51 90000-0013' },
-  { id: '14', name: 'Beatriz Cunha', company: 'Academia Fit', status: 'contacted', source: 'meta_ads', aiScore: 68, value: 6500, temperature: 'warm', email: 'beatriz@academiafit.com', phone: '+55 81 99999-0014' },
-  { id: '15', name: 'Vitor Santana', company: 'InfraTech', status: 'qualified', source: 'referral', aiScore: 80, value: 48000, temperature: 'hot', email: 'vitor@infratech.com.br', phone: '+55 61 98888-0015' },
-]
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   new: { label: 'Novo', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
@@ -65,9 +50,9 @@ const tabs = [
 ]
 
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
-  if (!open) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+  if (!open || typeof document === 'undefined') return null
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-lg rounded-2xl border border-white/10 bg-[#0d1425] shadow-2xl">
         <div className="flex items-center justify-between p-5 border-b border-white/10">
@@ -76,13 +61,16 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
         </div>
         <div className="p-5 max-h-[80vh] overflow-y-auto">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
 export default function LeadsPage() {
   usePageTitle('Leads')
-  const [leads, setLeads] = useState(initial)
+  const { user } = useAuthStore()
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('all')
   const [search, setSearch] = useState('')
   const [viewLead, setViewLead] = useState<Lead | null>(null)
@@ -90,16 +78,64 @@ export default function LeadsPage() {
   const [form, setForm] = useState({ name: '', company: '', email: '', phone: '', status: 'new', source: 'meta_ads', temperature: 'warm', value: '' })
   const [saved, setSaved] = useState(false)
 
+  useEffect(() => {
+    fetch('/api/leads')
+      .then(r => r.json())
+      .then((data: Array<{ id: string; name: string; company?: string; status: string; source: string; score?: number; value?: number; temperature: string; email?: string; phone?: string }>) => {
+        if (Array.isArray(data)) {
+          setLeads(data.map(l => ({
+            id: l.id,
+            name: l.name,
+            company: l.company || '—',
+            status: l.status,
+            source: l.source,
+            aiScore: l.score ?? 70,
+            value: Number(l.value) || 0,
+            temperature: l.temperature,
+            email: l.email,
+            phone: l.phone,
+          })))
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  useRealtime<{ id: string; name: string; company?: string; status: string; source: string; score?: number; value?: number; temperature: string; email?: string; phone?: string }>(
+    'leads',
+    {
+      existingIds: leads.map(l => l.id),
+      onInsert: (row) => setLeads(prev => [{
+        id: row.id,
+        name: row.name,
+        company: row.company || '—',
+        status: row.status,
+        source: row.source,
+        aiScore: row.score ?? 70,
+        value: Number(row.value) || 0,
+        temperature: row.temperature,
+        email: row.email,
+        phone: row.phone,
+      }, ...prev]),
+      onUpdate: (row) => setLeads(prev => prev.map(l => l.id === row.id
+        ? { ...l, name: row.name, company: row.company || '—', status: row.status, source: row.source, aiScore: row.score ?? l.aiScore, value: Number(row.value) || 0, temperature: row.temperature, email: row.email, phone: row.phone }
+        : l
+      )),
+      onDelete: (id) => setLeads(prev => prev.filter(l => l.id !== id)),
+    }
+  )
+
   const filtered = leads.filter(l => {
     const matchTab = activeTab === 'all' || (activeTab === 'hot' && l.temperature === 'hot') || (activeTab === 'negotiation' && l.status === 'negotiation') || (activeTab === 'won' && l.status === 'won')
     const matchSearch = !search || l.name.toLowerCase().includes(search.toLowerCase()) || l.company.toLowerCase().includes(search.toLowerCase())
     return matchTab && matchSearch
   })
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!form.name) return
-    const newLead: Lead = {
-      id: String(Date.now()),
+    const aiScore = Math.floor(Math.random() * 40 + 40)
+    const optimisticLead: Lead = {
+      id: `temp-${Date.now()}`,
       name: form.name,
       company: form.company || '—',
       email: form.email,
@@ -108,15 +144,59 @@ export default function LeadsPage() {
       source: form.source,
       temperature: form.temperature,
       value: Number(form.value) || 0,
-      aiScore: Math.floor(Math.random() * 40 + 40),
+      aiScore,
     }
-    setLeads(prev => [newLead, ...prev])
+    setLeads(prev => [optimisticLead, ...prev])
     setSaved(true)
+
+    try {
+      const res = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.name,
+          company: form.company || '',
+          email: form.email,
+          phone: form.phone,
+          status: form.status,
+          source: form.source,
+          temperature: form.temperature,
+          value: Number(form.value) || 0,
+          score: aiScore,
+        }),
+      })
+      if (res.ok) {
+        const created = await res.json()
+        setLeads(prev => prev.map(l => l.id === optimisticLead.id
+          ? { ...optimisticLead, id: created.id }
+          : l
+        ))
+        sendMetaEvent({
+          eventName: 'Lead',
+          email: form.email,
+          phone: form.phone,
+          leadId: created.id,
+          value: Number(form.value) || undefined,
+        })
+      }
+    } catch {
+      // keep optimistic entry
+    }
+
     setTimeout(() => {
       setCreateModal(false)
       setSaved(false)
       setForm({ name: '', company: '', email: '', phone: '', status: 'new', source: 'meta_ads', temperature: 'warm', value: '' })
     }, 800)
+  }
+
+  const handleDelete = async (id: string) => {
+    setLeads(prev => prev.filter(l => l.id !== id))
+    try {
+      await fetch(`/api/leads/${id}`, { method: 'DELETE' })
+    } catch {
+      // ignore
+    }
   }
 
   return (
@@ -153,12 +233,19 @@ export default function LeadsPage() {
 
       <p className="text-sm text-slate-400">Mostrando <span className="text-white font-medium">{filtered.length}</span> leads</p>
 
-      <div className="rounded-2xl border border-white/10 bg-white/3 backdrop-blur-sm overflow-hidden">
+      {loading && (
+        <div className="flex items-center justify-center py-16">
+          <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
+      {!loading && (
+      <div className="rounded-2xl border border-white/10 bg-white/3 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/10">
-                {['Lead', 'Status', 'Origem', 'Score IA', 'Valor', 'Temp.', ''].map((h, i) => (
+                {['Lead', 'Status', 'Origem', 'Valor', 'Temp.', ''].map((h, i) => (
                   <th key={i} className="text-left px-4 py-3.5 text-xs font-medium text-slate-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -183,14 +270,6 @@ export default function LeadsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3.5 text-sm text-slate-400">{sourceLabel[lead.source] ?? lead.source}</td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-20 rounded-full bg-white/10">
-                        <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-cyan-400" style={{ width: `${lead.aiScore}%` }} />
-                      </div>
-                      <span className="text-xs text-slate-400 tabular-nums">{lead.aiScore}</span>
-                    </div>
-                  </td>
                   <td className="px-4 py-3.5 text-sm font-medium text-slate-300 tabular-nums">
                     {lead.value > 0 ? `R$ ${lead.value.toLocaleString('pt-BR')}` : '—'}
                   </td>
@@ -203,6 +282,9 @@ export default function LeadsPage() {
                       <button className="p-1.5 rounded-lg text-slate-500 hover:text-green-400 hover:bg-green-500/10 transition-colors">
                         <MessageCircle className="w-4 h-4" />
                       </button>
+                      <button onClick={() => handleDelete(lead.id)} className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -211,6 +293,7 @@ export default function LeadsPage() {
           </table>
         </div>
       </div>
+      )}
 
       {/* View lead modal */}
       <Modal open={!!viewLead} onClose={() => setViewLead(null)} title="Detalhes do Lead">

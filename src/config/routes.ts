@@ -6,21 +6,14 @@ export const routes = {
     resetPassword: '/reset-password',
   },
   dashboard: '/dashboard',
+  clients: '/clients',
   leads: {
     root: '/leads',
     detail: (id: string) => `/leads/${id}`,
     kanban: '/leads/kanban',
   },
-  campaigns: {
-    root: '/campaigns',
-    detail: (id: string) => `/campaigns/${id}`,
-    meta: '/campaigns/meta-ads',
-    google: '/campaigns/google-ads',
-    tiktok: '/campaigns/tiktok-ads',
-  },
-  automations: '/automations',
-  ai: '/ai',
   whatsapp: '/whatsapp',
+  ai: '/ai',
   analytics: '/analytics',
   finance: {
     root: '/finance',
@@ -45,15 +38,14 @@ export const publicRoutes = [
   routes.auth.register,
   routes.auth.forgotPassword,
   routes.auth.resetPassword,
+  '/clear-session',
 ]
 
 export const protectedRoutes = [
   routes.dashboard,
   routes.leads.root,
-  routes.campaigns.root,
-  routes.automations,
-  routes.ai,
   routes.whatsapp,
+  routes.ai,
   routes.analytics,
   routes.finance.root,
   routes.calendar,

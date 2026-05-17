@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { usePageTitle } from '@/hooks/usePageTitle'
+import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import { Plus, TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpRight, ArrowDownRight, X, CheckCircle2 } from 'lucide-react'
 import { mockFinancialSummary, mockTransactions } from '@/services/mocks/finance.mock'
@@ -36,7 +37,7 @@ const categories = ['subscription', 'project', 'ads', 'consulting', 'payroll', '
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-[#0d1425] shadow-2xl">
         <div className="flex items-center justify-between p-5 border-b border-white/10">
@@ -51,8 +52,10 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
 
 export default function FinancePage() {
   usePageTitle('Financeiro')
+  const { user } = useAuthStore()
+  const isEmpty = !user?.isDemo
   const [activeTab, setActiveTab] = useState('all')
-  const [transactions, setTransactions] = useState([...mockTransactions, ...extraTransactions])
+  const [transactions, setTransactions] = useState(isEmpty ? [] : [...mockTransactions, ...extraTransactions])
   const [createModal, setCreateModal] = useState(false)
   const [form, setForm] = useState({ type: 'income', description: '', category: categories[0], amount: '', status: 'completed' })
   const [saved, setSaved] = useState(false)
@@ -78,12 +81,19 @@ export default function FinancePage() {
     setTimeout(() => { setCreateModal(false); setSaved(false); setForm({ type: 'income', description: '', category: categories[0], amount: '', status: 'completed' }) }, 800)
   }
 
-  const summaryCards = [
-    { label: 'Receita Total', value: `R$ ${mockFinancialSummary.totalRevenue.toLocaleString('pt-BR')}`, change: '+12,5%', up: true, icon: DollarSign, color: 'from-green-500/20 to-green-500/5 border-green-500/20', iconColor: 'text-green-400' },
-    { label: 'Despesas', value: `R$ ${mockFinancialSummary.totalExpenses.toLocaleString('pt-BR')}`, change: '-3,2%', up: true, icon: ArrowDownRight, color: 'from-red-500/20 to-red-500/5 border-red-500/20', iconColor: 'text-red-400' },
-    { label: 'Lucro Líquido', value: `R$ ${mockFinancialSummary.netProfit.toLocaleString('pt-BR')}`, change: '+18,1%', up: true, icon: TrendingUp, color: 'from-blue-500/20 to-blue-500/5 border-blue-500/20', iconColor: 'text-blue-400' },
-    { label: 'MRR', value: `R$ ${mockFinancialSummary.mrr.toLocaleString('pt-BR')}`, change: '+9,1%', up: true, icon: BarChart3, color: 'from-purple-500/20 to-purple-500/5 border-purple-500/20', iconColor: 'text-purple-400' },
-  ]
+  const summaryCards = isEmpty
+    ? [
+        { label: 'Receita Total', value: 'R$ 0', change: '0%', up: true, icon: DollarSign, color: 'from-green-500/20 to-green-500/5 border-green-500/20', iconColor: 'text-green-400' },
+        { label: 'Despesas', value: 'R$ 0', change: '0%', up: true, icon: ArrowDownRight, color: 'from-red-500/20 to-red-500/5 border-red-500/20', iconColor: 'text-red-400' },
+        { label: 'Lucro Líquido', value: 'R$ 0', change: '0%', up: true, icon: TrendingUp, color: 'from-blue-500/20 to-blue-500/5 border-blue-500/20', iconColor: 'text-blue-400' },
+        { label: 'MRR', value: 'R$ 0', change: '0%', up: true, icon: BarChart3, color: 'from-purple-500/20 to-purple-500/5 border-purple-500/20', iconColor: 'text-purple-400' },
+      ]
+    : [
+        { label: 'Receita Total', value: `R$ ${mockFinancialSummary.totalRevenue.toLocaleString('pt-BR')}`, change: '+12,5%', up: true, icon: DollarSign, color: 'from-green-500/20 to-green-500/5 border-green-500/20', iconColor: 'text-green-400' },
+        { label: 'Despesas', value: `R$ ${mockFinancialSummary.totalExpenses.toLocaleString('pt-BR')}`, change: '-3,2%', up: true, icon: ArrowDownRight, color: 'from-red-500/20 to-red-500/5 border-red-500/20', iconColor: 'text-red-400' },
+        { label: 'Lucro Líquido', value: `R$ ${mockFinancialSummary.netProfit.toLocaleString('pt-BR')}`, change: '+18,1%', up: true, icon: TrendingUp, color: 'from-blue-500/20 to-blue-500/5 border-blue-500/20', iconColor: 'text-blue-400' },
+        { label: 'MRR', value: `R$ ${mockFinancialSummary.mrr.toLocaleString('pt-BR')}`, change: '+9,1%', up: true, icon: BarChart3, color: 'from-purple-500/20 to-purple-500/5 border-purple-500/20', iconColor: 'text-purple-400' },
+      ]
 
   return (
     <div className="space-y-6">

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { usePageTitle } from '@/hooks/usePageTitle'
+import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import { Plus, FileText, BarChart2, DollarSign, Users, MessageSquare, Download, Eye, X, CheckCircle2, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
@@ -21,7 +22,7 @@ const formats = ['PDF', 'XLSX', 'CSV']
 function Modal({ open, onClose, title, wide, children }: { open: boolean; onClose: () => void; title: string; wide?: boolean; children: React.ReactNode }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className={cn('relative z-10 w-full rounded-2xl border border-white/10 bg-[#0d1425] shadow-2xl', wide ? 'max-w-lg' : 'max-w-md')}>
         <div className="flex items-center justify-between p-5 border-b border-white/10">
@@ -36,6 +37,8 @@ function Modal({ open, onClose, title, wide, children }: { open: boolean; onClos
 
 export default function ReportsPage() {
   usePageTitle('Relatórios')
+  const { user } = useAuthStore()
+  const activeReports = !user?.isDemo ? [] : reports
   const [previewReport, setPreviewReport] = useState<typeof reports[0] | null>(null)
   const [generateModal, setGenerateModal] = useState(false)
   const [downloading, setDownloading] = useState<string | null>(null)
@@ -71,7 +74,10 @@ export default function ReportsPage() {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        {reports.map(r => {
+        {activeReports.length === 0 && (
+          <p className="text-sm text-slate-500 text-center py-12">Nenhum relatório ainda.</p>
+        )}
+        {activeReports.map(r => {
           const Icon = r.icon
           const isDown = downloading === r.id
           const isDone = downloaded === r.id

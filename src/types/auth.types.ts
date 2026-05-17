@@ -23,6 +23,7 @@ export interface User {
   status: UserStatus
   permissions: Permission[]
   teamId?: ID
+  isDemo?: boolean
   createdAt: Timestamp
   updatedAt: Timestamp
   lastLoginAt?: Timestamp
