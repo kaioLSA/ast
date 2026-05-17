@@ -89,7 +89,7 @@ const emptyPieData = pieData.map(d => ({ ...d, value: 0 }))
 export default function AnalyticsPage() {
   usePageTitle('Analytics')
   const { user } = useAuthStore()
-  const isEmpty = user?.teamId === 'gabriel-team'
+  const isEmpty = !user?.isDemo
   const activeMetrics = isEmpty ? emptyMetricCards : metricCards
   const activeLeads = isEmpty ? emptyLeadsData : leadsData
   const activeRevenue = isEmpty ? emptyRevenueData : revenueData

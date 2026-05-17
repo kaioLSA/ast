@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, MessageCircle,
   BarChart3, DollarSign, Calendar, FileText, Settings, UsersRound,
-  ChevronLeft, ChevronRight, LogOut,
+  ChevronLeft, ChevronRight, LogOut, Building2, Sparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { useSidebar } from '@/hooks/useSidebar'
@@ -17,7 +17,9 @@ import { routes } from '@/config/routes'
 const navItems = [
   { label: 'Dashboard', href: routes.dashboard, icon: LayoutDashboard, group: 'main' },
   { label: 'Leads', href: routes.leads.root, icon: Users, group: 'main' },
+  { label: 'Clientes', href: routes.clients, icon: Building2, group: 'main' },
   { label: 'WhatsApp', href: routes.whatsapp, icon: MessageCircle, group: 'tools' },
+  { label: 'IA', href: routes.ai, icon: Sparkles, group: 'tools' },
   { label: 'Analytics', href: routes.analytics, icon: BarChart3, group: 'tools' },
   { label: 'Financeiro', href: routes.finance.root, icon: DollarSign, group: 'tools' },
   { label: 'Calendário', href: routes.calendar, icon: Calendar, group: 'tools' },

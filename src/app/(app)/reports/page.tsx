@@ -22,7 +22,7 @@ const formats = ['PDF', 'XLSX', 'CSV']
 function Modal({ open, onClose, title, wide, children }: { open: boolean; onClose: () => void; title: string; wide?: boolean; children: React.ReactNode }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className={cn('relative z-10 w-full rounded-2xl border border-white/10 bg-[#0d1425] shadow-2xl', wide ? 'max-w-lg' : 'max-w-md')}>
         <div className="flex items-center justify-between p-5 border-b border-white/10">
@@ -38,7 +38,7 @@ function Modal({ open, onClose, title, wide, children }: { open: boolean; onClos
 export default function ReportsPage() {
   usePageTitle('Relatórios')
   const { user } = useAuthStore()
-  const activeReports = user?.teamId === 'gabriel-team' ? [] : reports
+  const activeReports = !user?.isDemo ? [] : reports
   const [previewReport, setPreviewReport] = useState<typeof reports[0] | null>(null)
   const [generateModal, setGenerateModal] = useState(false)
   const [downloading, setDownloading] = useState<string | null>(null)

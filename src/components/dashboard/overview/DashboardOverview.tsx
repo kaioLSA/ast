@@ -222,7 +222,7 @@ const emptyMetrics = [
 
 export function DashboardOverview() {
   const { user } = useAuthStore()
-  const isEmpty = user?.teamId === 'gabriel-team'
+  const isEmpty = !user?.isDemo
   const activeMetrics = isEmpty ? emptyMetrics : metrics
   const activeLeads = isEmpty ? [] : mockLeads.slice(0, 4)
   const sourceBars = isEmpty ? [] : mockDashboardAnalytics.sourceBreakdown

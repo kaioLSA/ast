@@ -6,12 +6,14 @@ export const routes = {
     resetPassword: '/reset-password',
   },
   dashboard: '/dashboard',
+  clients: '/clients',
   leads: {
     root: '/leads',
     detail: (id: string) => `/leads/${id}`,
     kanban: '/leads/kanban',
   },
   whatsapp: '/whatsapp',
+  ai: '/ai',
   analytics: '/analytics',
   finance: {
     root: '/finance',
@@ -36,12 +38,14 @@ export const publicRoutes = [
   routes.auth.register,
   routes.auth.forgotPassword,
   routes.auth.resetPassword,
+  '/clear-session',
 ]
 
 export const protectedRoutes = [
   routes.dashboard,
   routes.leads.root,
   routes.whatsapp,
+  routes.ai,
   routes.analytics,
   routes.finance.root,
   routes.calendar,

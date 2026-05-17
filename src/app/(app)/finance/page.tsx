@@ -37,7 +37,7 @@ const categories = ['subscription', 'project', 'ads', 'consulting', 'payroll', '
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-[#0d1425] shadow-2xl">
         <div className="flex items-center justify-between p-5 border-b border-white/10">
@@ -53,7 +53,7 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
 export default function FinancePage() {
   usePageTitle('Financeiro')
   const { user } = useAuthStore()
-  const isEmpty = user?.teamId === 'gabriel-team'
+  const isEmpty = !user?.isDemo
   const [activeTab, setActiveTab] = useState('all')
   const [transactions, setTransactions] = useState(isEmpty ? [] : [...mockTransactions, ...extraTransactions])
   const [createModal, setCreateModal] = useState(false)

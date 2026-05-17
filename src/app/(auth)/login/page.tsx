@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import { LoginForm } from '@/components/ui/auth/LoginForm'
+import { LoginPageHeader } from '@/components/ui/auth/LoginPageHeader'
 
 export const metadata: Metadata = { title: 'Entrar — Startsette CRM' }
 
@@ -35,20 +36,13 @@ export default function LoginPage() {
         {/* Card */}
         <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-8 shadow-[0_25px_60px_rgba(0,0,0,0.5)]">
           <div className="mb-6">
-            <h2 className="text-xl font-semibold text-white">Bem-vindo de volta</h2>
-            <p className="text-slate-400 text-sm mt-1">Entre com suas credenciais para acessar</p>
+            <LoginPageHeader />
           </div>
 
           <LoginForm />
 
-          {/* Demo hint */}
-          <div className="mt-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
-            <p className="text-xs font-semibold text-blue-400 mb-2">✦ Acesso demo</p>
-            <div className="space-y-1 text-xs text-slate-400 font-mono">
-              <p><span className="text-slate-300">admin@startsette.com</span> · admin123</p>
-              <p><span className="text-slate-300">demo@startsette.com</span> · demo123</p>
-            </div>
-          </div>
+          {/* Demo hint — only on login step */}
+          <LoginDemoHint />
         </div>
 
         <p className="text-center text-xs text-slate-600 mt-6">
@@ -56,5 +50,18 @@ export default function LoginPage() {
         </p>
       </div>
     </main>
+  )
+}
+
+function LoginDemoHint() {
+  // This is a server component so it always renders — the hint is hidden via CSS on the change-password step
+  // We keep it simple: always show. The ChangePasswordStep banner replaces the visual focus anyway.
+  return (
+    <div className="mt-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+      <p className="text-xs font-semibold text-blue-400 mb-2">✦ Acesso demo</p>
+      <div className="space-y-1 text-xs text-slate-400 font-mono">
+        <p><span className="text-slate-300">demo@startsette.com</span> · demo123</p>
+      </div>
+    </div>
   )
 }

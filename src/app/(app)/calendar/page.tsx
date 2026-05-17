@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { usePageTitle } from '@/hooks/usePageTitle'
-import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import { Plus, ChevronLeft, ChevronRight, X, CheckCircle2, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
+import { useRealtime } from '@/hooks/useRealtime'
 
 const DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -31,24 +32,13 @@ const colorOptions = [
   { label: 'Vermelho', value: 'bg-red-500/20 text-red-300 border-red-500/30', dot: 'bg-red-400' },
 ]
 
-const initialEvents: CalEvent[] = [
-  { id: '1', label: 'Reunião Pedro Oliveira', color: colorOptions[0].value, time: '10:00', description: 'Apresentação da proposta comercial para o lead Pedro Oliveira da Startup X. Discutir escopo e condições de pagamento.', day: 1, month: 4, year: 2026 },
-  { id: '2', label: 'Demo Varejo Plus', color: colorOptions[2].value, time: '14:00', description: 'Demonstração da plataforma para a equipe de vendas da Varejo Plus. Foco nas funcionalidades de automação e relatórios.', day: 5, month: 4, year: 2026 },
-  { id: '3', label: 'Follow-up Carlos Mendes', color: colorOptions[3].value, time: '09:30', description: 'Retorno à proposta enviada para Carlos Mendes da TechSolutions. Prazo limite para resposta.', day: 8, month: 4, year: 2026 },
-  { id: '4', label: 'Apresentação AgriTech', color: colorOptions[0].value, time: '15:00', description: 'Reunião com Juliana Santos para apresentação dos casos de uso no setor agro. Levar material impresso.', day: 12, month: 4, year: 2026 },
-  { id: '5', label: 'Fechamento Startup X', color: colorOptions[1].value, time: '11:00', description: 'Assinatura do contrato com Pedro Oliveira. R$ 72.000 anuais. Presença do jurídico necessária.', day: 15, month: 4, year: 2026 },
-  { id: '6', label: 'Revisão de Pipeline', color: colorOptions[0].value, time: '13:00', description: 'Reunião interna de equipe para revisar todos os deals em aberto e definir prioridades da semana.', day: 19, month: 4, year: 2026 },
-  { id: '7', label: 'Campanha Black Friday', color: colorOptions[4].value, time: '16:00', description: 'Kick-off da campanha de Black Friday com o time de marketing. Definir orçamento e criativos das campanhas Meta e Google.', day: 22, month: 4, year: 2026 },
-  { id: '8', label: 'Relatório Mensal', color: colorOptions[5].value, time: '09:00', description: 'Compilação e envio do relatório de performance de Maio para toda a equipe e stakeholders.', day: 28, month: 4, year: 2026 },
-]
-
 function getDaysInMonth(y: number, m: number) { return new Date(y, m + 1, 0).getDate() }
 function getFirstDay(y: number, m: number) { return new Date(y, m, 1).getDay() }
 
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
-  if (!open) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+  if (!open || typeof document === 'undefined') return null
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-[#0d1425] shadow-2xl">
         <div className="flex items-center justify-between p-5 border-b border-white/10">
@@ -57,21 +47,43 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
         </div>
         <div className="p-5 max-h-[80vh] overflow-y-auto">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
 export default function CalendarPage() {
   usePageTitle('Calendário')
-  const { user } = useAuthStore()
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
-  const [events, setEvents] = useState<CalEvent[]>(user?.teamId === 'gabriel-team' ? [] : initialEvents)
+  const [events, setEvents] = useState<CalEvent[]>([])
   const [createModal, setCreateModal] = useState(false)
   const [viewEvent, setViewEvent] = useState<CalEvent | null>(null)
-  const [form, setForm] = useState({ label: '', time: '10:00', color: colorOptions[0].value, day: '', month: String(4), year: String(2026), description: '' })
+  const [form, setForm] = useState({ label: '', time: '10:00', color: colorOptions[0].value, day: '', month: String(today.getMonth()), year: String(today.getFullYear()), description: '' })
   const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/calendar')
+      .then(r => r.json())
+      .then((data: CalEvent[]) => {
+        if (Array.isArray(data)) setEvents(data)
+      })
+      .catch(() => {})
+  }, [])
+
+  useRealtime<CalEvent>(
+    'calendar_events',
+    {
+      existingIds: events.map(e => e.id),
+      onInsert: (row) => setEvents(prev => [...prev, row]),
+      onUpdate: (row) => setEvents(prev => prev.map(e => e.id === row.id ? row : e)),
+      onDelete: (id) => {
+        setEvents(prev => prev.filter(e => e.id !== id))
+        setViewEvent(cur => (cur?.id === id ? null : cur))
+      },
+    }
+  )
 
   const daysInMonth = getDaysInMonth(year, month)
   const firstDay = getFirstDay(year, month)
@@ -93,10 +105,10 @@ export default function CalendarPage() {
     setCreateModal(true)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.label || !form.day) return
-    const newEvent: CalEvent = {
-      id: String(Date.now()),
+    const optimisticEvent: CalEvent = {
+      id: `temp-${Date.now()}`,
       label: form.label,
       color: form.color,
       time: form.time,
@@ -105,14 +117,45 @@ export default function CalendarPage() {
       month: Number(form.month),
       year: Number(form.year),
     }
-    setEvents(prev => [...prev, newEvent])
+    setEvents(prev => [...prev, optimisticEvent])
     setSaved(true)
+
+    try {
+      const res = await fetch('/api/calendar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          label: form.label,
+          color: form.color,
+          time: form.time,
+          description: form.description,
+          day: Number(form.day),
+          month: Number(form.month),
+          year: Number(form.year),
+        }),
+      })
+      if (res.ok) {
+        const created = await res.json()
+        setEvents(prev => prev.map(e => e.id === optimisticEvent.id
+          ? { ...optimisticEvent, id: created.id }
+          : e
+        ))
+      }
+    } catch {
+      // keep optimistic entry
+    }
+
     setTimeout(() => { setCreateModal(false); setSaved(false) }, 700)
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     setEvents(prev => prev.filter(e => e.id !== id))
     if (viewEvent?.id === id) setViewEvent(null)
+    try {
+      await fetch(`/api/calendar/${id}`, { method: 'DELETE' })
+    } catch {
+      // ignore
+    }
   }
 
   return (
@@ -128,7 +171,7 @@ export default function CalendarPage() {
         }
       />
 
-      <div className="rounded-2xl border border-white/10 bg-white/3 backdrop-blur-sm p-6">
+      <div className="rounded-2xl border border-white/10 bg-white/3 p-6">
         {/* Month nav */}
         <div className="flex items-center justify-between mb-6">
           <button onClick={prev} className="p-2 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"><ChevronLeft className="w-5 h-5" /></button>
@@ -173,7 +216,7 @@ export default function CalendarPage() {
       </div>
 
       {/* Upcoming list */}
-      <div className="rounded-2xl border border-white/10 bg-white/3 p-6 backdrop-blur-sm">
+      <div className="rounded-2xl border border-white/10 bg-white/3 p-6">
         <h3 className="text-lg font-semibold text-white mb-4">Eventos — {MONTHS[month]} {year}</h3>
         {upcomingEvents.length === 0 ? (
           <p className="text-sm text-slate-500 text-center py-6">Nenhum evento neste mês.</p>

@@ -53,7 +53,7 @@ const objectives = ['Leads', 'Conversões', 'Tráfego', 'Alcance', 'Engajamento'
 function Modal({ open, onClose, title, wide, children }: { open: boolean; onClose: () => void; title: string; wide?: boolean; children: React.ReactNode }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className={cn('relative z-10 w-full rounded-2xl border border-white/10 bg-[#0d1425] shadow-2xl', wide ? 'max-w-2xl' : 'max-w-lg')}>
         <div className="flex items-center justify-between p-5 border-b border-white/10">

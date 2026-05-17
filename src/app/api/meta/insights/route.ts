@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 const TOKEN = process.env.META_ACCESS_TOKEN
-const STARTSETTE_ACCOUNT = 'act_549337254577555'
+const STARTSETTE_ACCOUNT = process.env.META_AD_ACCOUNT_ID ?? 'act_549337254577555'
 const TEST_ACCOUNTS = ['act_1296859628917698'] // CA - START - Alisson 02
 
 const VALID_PERIODS = [

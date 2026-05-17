@@ -1,218 +1,866 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { usePageTitle } from '@/hooks/usePageTitle'
 import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
-import { Plus, Mail, DollarSign, Target, X, CheckCircle2, Phone, TrendingUp } from 'lucide-react'
+import {
+  Plus, Mail, X, CheckCircle2, Shield, User, Users, Eye, EyeOff,
+  Building2, Calendar, DollarSign, BarChart3, MessageCircle,
+  FileText, Target, Settings, Zap, Trash2, ChevronDown, ChevronUp, ShieldCheck, KeyRound, AlertTriangle, Lock,
+} from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
-const members = [
-  { id: '1', name: 'Admin Startsette', role: 'Administrador', department: 'admin', email: 'admin@startsette.com', phone: '+55 11 99100-0001', metric: '47 negócios fechados', revenue: 'R$ 248.500', avatar: 'AS', gradient: 'from-blue-500 to-cyan-500', joinedAt: 'Jan 2024', goal: 'R$ 300.000', goalPct: 82, bio: 'Fundador e administrador da Startsette. Responsável pela estratégia geral de vendas e crescimento da empresa.' },
-  { id: '2', name: 'Ana Lima', role: 'Vendedora Senior', department: 'sales', email: 'ana@startsette.com', phone: '+55 11 99100-0002', metric: '23 negócios fechados', revenue: 'R$ 124.300', avatar: 'AL', gradient: 'from-purple-500 to-pink-500', joinedAt: 'Mar 2024', goal: 'R$ 150.000', goalPct: 83, bio: 'Vendedora sênior com foco em contas enterprise. Especialista em negociações B2B complexas e gestão de relacionamento.' },
-  { id: '3', name: 'Bruno Reis', role: 'Vendedor', department: 'sales', email: 'bruno@startsette.com', phone: '+55 11 99100-0003', metric: '15 negócios fechados', revenue: 'R$ 87.200', avatar: 'BR', gradient: 'from-green-500 to-teal-500', joinedAt: 'Jun 2024', goal: 'R$ 100.000', goalPct: 87, bio: 'Vendedor focado no segmento de varejo e PMEs. Excelente histórico em prospecção via LinkedIn e WhatsApp.' },
-  { id: '4', name: 'Carla Souza', role: 'SDR', department: 'sales', email: 'carla@startsette.com', phone: '+55 11 99100-0004', metric: '89 leads qualificados', revenue: null, avatar: 'CS', gradient: 'from-yellow-500 to-orange-500', joinedAt: 'Ago 2024', goal: '100 leads/mês', goalPct: 89, bio: 'SDR especializada em qualificação de leads inbound. Responsável pelo BANT e handoff para closers.' },
-  { id: '5', name: 'Diego Santos', role: 'Marketing', department: 'marketing', email: 'diego@startsette.com', phone: '+55 11 99100-0005', metric: '6 campanhas ativas', revenue: null, avatar: 'DS', gradient: 'from-pink-500 to-rose-500', joinedAt: 'Fev 2024', goal: '500 leads/mês', goalPct: 68, bio: 'Gestor de tráfego pago e conteúdo. Responsável pelas campanhas Meta, Google e TikTok Ads da empresa.' },
-  { id: '6', name: 'Fernanda Costa', role: 'Customer Success', department: 'cs', email: 'fernanda@startsette.com', phone: '+55 11 99100-0006', metric: '98% satisfação', revenue: null, avatar: 'FC', gradient: 'from-cyan-500 to-blue-500', joinedAt: 'Abr 2024', goal: '95% NPS', goalPct: 98, bio: 'CS Manager focada em retenção e expansão de contas. Responsável pelo onboarding e health score dos clientes.' },
-  { id: '7', name: 'Gabriel Moura', role: 'Vendedor Junior', department: 'sales', email: 'gabriel@startsette.com', phone: '+55 11 99100-0007', metric: '8 negócios fechados', revenue: 'R$ 32.100', avatar: 'GM', gradient: 'from-indigo-500 to-purple-500', joinedAt: 'Out 2024', goal: 'R$ 50.000', goalPct: 64, bio: 'Vendedor júnior em crescimento acelerado. Foco em pequenas e médias empresas do setor de tecnologia.' },
-  { id: '8', name: 'Helena Rocha', role: 'SDR', department: 'sales', email: 'helena@startsette.com', phone: '+55 11 99100-0008', metric: '67 leads qualificados', revenue: null, avatar: 'HR', gradient: 'from-teal-500 to-green-500', joinedAt: 'Nov 2024', goal: '100 leads/mês', goalPct: 67, bio: 'SDR com foco em outbound e cold calling. Especialista em mercado agro e industrial.' },
-]
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-const deptColors: Record<string, string> = {
-  admin: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  sales: 'bg-green-500/10 text-green-400 border-green-500/20',
-  marketing: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-  cs: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+type Member = {
+  id: string
+  name: string
+  email: string
+  role: 'admin' | 'agent' | string
+  custom_role: string
+  permissions: string[]
+  active: boolean
+  created_at: string
 }
 
-const roles = ['Administrador', 'Vendedor Senior', 'Vendedor', 'SDR', 'Marketing', 'Customer Success', 'Vendedor Junior']
-const departments = ['admin', 'sales', 'marketing', 'cs']
-const deptLabel: Record<string, string> = { admin: 'Admin', sales: 'Vendas', marketing: 'Marketing', cs: 'CS' }
+// ─── Permissions definition ───────────────────────────────────────────────────
 
-function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
-  if (!open) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+const PERMISSION_GROUPS = [
+  {
+    key: 'leads', label: 'Leads', icon: Users,
+    items: [
+      { key: 'leads:read', label: 'Visualizar leads' },
+      { key: 'leads:write', label: 'Criar e editar leads' },
+      { key: 'leads:delete', label: 'Excluir leads' },
+    ],
+  },
+  {
+    key: 'clients', label: 'Clientes', icon: Building2,
+    items: [
+      { key: 'clients:read', label: 'Visualizar clientes' },
+      { key: 'clients:write', label: 'Criar e editar clientes' },
+      { key: 'clients:delete', label: 'Excluir clientes' },
+    ],
+  },
+  {
+    key: 'calendar', label: 'Calendário', icon: Calendar,
+    items: [
+      { key: 'calendar:read', label: 'Visualizar eventos' },
+      { key: 'calendar:write', label: 'Criar e editar eventos' },
+      { key: 'calendar:delete', label: 'Excluir eventos' },
+    ],
+  },
+  {
+    key: 'finance', label: 'Financeiro', icon: DollarSign,
+    items: [
+      { key: 'finance:read', label: 'Visualizar financeiro' },
+      { key: 'finance:write', label: 'Editar lançamentos' },
+    ],
+  },
+  {
+    key: 'analytics', label: 'Analytics', icon: BarChart3,
+    items: [
+      { key: 'analytics:read', label: 'Visualizar analytics' },
+    ],
+  },
+  {
+    key: 'whatsapp', label: 'WhatsApp', icon: MessageCircle,
+    items: [
+      { key: 'whatsapp:read', label: 'Visualizar conversas' },
+      { key: 'whatsapp:write', label: 'Enviar mensagens' },
+    ],
+  },
+  {
+    key: 'reports', label: 'Relatórios', icon: FileText,
+    items: [
+      { key: 'reports:read', label: 'Visualizar relatórios' },
+    ],
+  },
+  {
+    key: 'campaigns', label: 'Campanhas', icon: Target,
+    items: [
+      { key: 'campaigns:read', label: 'Visualizar campanhas' },
+      { key: 'campaigns:write', label: 'Criar e editar campanhas' },
+      { key: 'campaigns:delete', label: 'Excluir campanhas' },
+    ],
+  },
+  {
+    key: 'team', label: 'Equipe', icon: Users,
+    items: [
+      { key: 'team:read', label: 'Visualizar membros' },
+      { key: 'team:write', label: 'Convidar membros' },
+      { key: 'team:delete', label: 'Remover membros' },
+    ],
+  },
+  {
+    key: 'settings', label: 'Configurações', icon: Settings,
+    items: [
+      { key: 'settings:read', label: 'Visualizar configurações' },
+      { key: 'settings:write', label: 'Editar configurações' },
+    ],
+  },
+  {
+    key: 'ai', label: 'Inteligência Artificial', icon: Zap,
+    items: [
+      { key: 'ai:use', label: 'Usar recursos de IA' },
+    ],
+  },
+]
+
+const ALL_PERMISSIONS = PERMISSION_GROUPS.flatMap(g => g.items.map(i => i.key))
+
+const GRADIENTS = [
+  'from-blue-500 to-cyan-500',
+  'from-violet-500 to-purple-600',
+  'from-emerald-500 to-teal-500',
+  'from-orange-500 to-amber-500',
+  'from-rose-500 to-pink-500',
+  'from-indigo-500 to-blue-600',
+  'from-cyan-500 to-sky-500',
+  'from-green-500 to-emerald-500',
+]
+
+function getGradient(name: string) {
+  const code = name.charCodeAt(0) % GRADIENTS.length
+  return GRADIENTS[code]
+}
+
+function getInitials(name: string) {
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+}
+
+// ─── Modal wrapper with portal ────────────────────────────────────────────────
+
+function Modal({ open, onClose, title, wide, children }: {
+  open: boolean; onClose: () => void; title: string; wide?: boolean; children: React.ReactNode
+}) {
+  if (!open || typeof document === 'undefined') return null
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-[#0d1425] shadow-2xl">
+      <div className={cn('relative z-10 w-full rounded-2xl border border-white/10 bg-[#0d1425] shadow-2xl', wide ? 'max-w-2xl' : 'max-w-md')}>
         <div className="flex items-center justify-between p-5 border-b border-white/10">
           <h3 className="text-base font-semibold text-white">{title}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
         </div>
-        <div className="p-5 max-h-[80vh] overflow-y-auto">{children}</div>
+        <div className="p-5 max-h-[85vh] overflow-y-auto">{children}</div>
       </div>
+    </div>,
+    document.body
+  )
+}
+
+// ─── Permission toggle group ──────────────────────────────────────────────────
+
+function PermissionGroup({
+  group, selected, onChange, disabled,
+}: {
+  group: typeof PERMISSION_GROUPS[0]
+  selected: string[]
+  onChange: (key: string, checked: boolean) => void
+  disabled?: boolean
+}) {
+  const [open, setOpen] = useState(true)
+  const Icon = group.icon
+  const allChecked = group.items.every(i => selected.includes(i.key))
+  const someChecked = group.items.some(i => selected.includes(i.key))
+
+  const toggleGroup = () => {
+    if (disabled) return
+    const newVal = !allChecked
+    group.items.forEach(i => onChange(i.key, newVal))
+  }
+
+  return (
+    <div className="rounded-xl border border-white/8 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/3 transition-colors"
+      >
+        <div className="flex items-center gap-2.5">
+          <Icon className="w-4 h-4 text-slate-400" />
+          <span className="text-sm font-medium text-white">{group.label}</span>
+          {someChecked && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-medium">
+              {group.items.filter(i => selected.includes(i.key)).length}/{group.items.length}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {!disabled && (
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); toggleGroup() }}
+              className={cn(
+                'text-[10px] px-2 py-0.5 rounded-md border transition-colors',
+                allChecked
+                  ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                  : 'bg-white/5 text-slate-500 border-white/10 hover:text-slate-300'
+              )}
+            >
+              {allChecked ? 'Remover todos' : 'Selecionar todos'}
+            </button>
+          )}
+          {open ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
+        </div>
+      </button>
+      {open && (
+        <div className="px-4 pb-3 space-y-2 border-t border-white/5 pt-2">
+          {group.items.map(item => (
+            <label key={item.key} className={cn('flex items-center gap-3 cursor-pointer group', disabled && 'cursor-default opacity-70')}>
+              <div
+                onClick={() => !disabled && onChange(item.key, !selected.includes(item.key))}
+                className={cn(
+                  'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all',
+                  selected.includes(item.key)
+                    ? 'bg-blue-600 border-blue-500'
+                    : 'bg-white/5 border-white/20 group-hover:border-white/40'
+                )}
+              >
+                {selected.includes(item.key) && <CheckCircle2 className="w-3 h-3 text-white" />}
+              </div>
+              <span className="text-sm text-slate-300 select-none">{item.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+// Conta que nunca pode ser excluída/desativada
+const PROTECTED_EMAIL = 'kaiolaurindo@setteia.com'
+
+const emptyForm = {
+  name: '', email: '', password: '', confirmPassword: '',
+  role: 'custom' as 'admin' | 'custom',
+  custom_role: '',
+  permissions: [] as string[],
+}
+
+const emptyResetForm = { newPassword: '', confirmPassword: '' }
+
 export default function TeamPage() {
   usePageTitle('Equipe')
-  const { user } = useAuthStore()
-  const activeMembers = user?.teamId === 'gabriel-team' ? [] : members
-  const [activeTab, setActiveTab] = useState('all')
-  const [profileMember, setProfileMember] = useState<typeof members[0] | null>(null)
+  const { user: me } = useAuthStore()
+  const isAdmin = me?.role === 'admin'
+
+  const [members, setMembers] = useState<Member[]>([])
+  const [loading, setLoading] = useState(true)
   const [inviteModal, setInviteModal] = useState(false)
-  const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: roles[2], department: departments[1] })
-  const [invited, setInvited] = useState(false)
+  const [viewMember, setViewMember] = useState<Member | null>(null)
+  const [form, setForm] = useState(emptyForm)
+  const [showPass, setShowPass] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
 
-  const filtered = activeMembers.filter(m => activeTab === 'all' || m.department === activeTab)
+  // Confirm delete state
+  const [confirmDelete, setConfirmDelete] = useState<Member | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
-  const handleInvite = () => {
-    if (!inviteForm.email) return
-    setInvited(true)
-    setTimeout(() => { setInviteModal(false); setInvited(false); setInviteForm({ name: '', email: '', role: roles[2], department: departments[1] }) }, 800)
+  // Reset password state
+  const [resetModal, setResetModal] = useState(false)
+  const [resetTarget, setResetTarget] = useState<Member | null>(null)
+  const [resetForm, setResetForm] = useState(emptyResetForm)
+  const [resetSaving, setResetSaving] = useState(false)
+  const [resetSaved, setResetSaved] = useState(false)
+  const [resetError, setResetError] = useState('')
+  const [showResetPass, setShowResetPass] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/team')
+      .then(r => r.json())
+      .then((data: Member[]) => { if (Array.isArray(data)) setMembers(data) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  // When role switches to admin → auto-select all permissions
+  useEffect(() => {
+    if (form.role === 'admin') {
+      setForm(p => ({ ...p, permissions: ALL_PERMISSIONS }))
+    }
+  }, [form.role])
+
+  const togglePermission = (key: string, checked: boolean) => {
+    setForm(p => ({
+      ...p,
+      permissions: checked ? [...p.permissions, key] : p.permissions.filter(k => k !== key),
+    }))
   }
+
+  const handleCreate = async () => {
+    setError('')
+    if (!form.name.trim()) return setError('Nome é obrigatório')
+    if (!form.email.trim()) return setError('Email é obrigatório')
+    if (!form.password) return setError('Senha é obrigatória')
+    if (form.password.length < 6) return setError('Senha deve ter pelo menos 6 caracteres')
+    if (form.password !== form.confirmPassword) return setError('As senhas não coincidem')
+
+    setSaving(true)
+    try {
+      const res = await fetch('/api/team', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          password: form.password,
+          role: form.role === 'admin' ? 'admin' : 'agent',
+          custom_role: form.custom_role.trim(),
+          permissions: form.role === 'admin' ? ALL_PERMISSIONS : form.permissions,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? 'Erro ao criar membro')
+        setSaving(false)
+        return
+      }
+      setMembers(prev => [...prev, data])
+      setSaved(true)
+      setTimeout(() => {
+        setInviteModal(false)
+        setSaved(false)
+        setSaving(false)
+        setForm(emptyForm)
+      }, 900)
+    } catch {
+      setError('Erro de conexão')
+      setSaving(false)
+    }
+  }
+
+  const requestRemove = (member: Member) => {
+    setConfirmDelete(member)
+    setViewMember(null)
+  }
+
+  const handleRemove = async () => {
+    if (!confirmDelete) return
+    setDeleting(true)
+    await fetch(`/api/team/${confirmDelete.id}`, { method: 'DELETE' })
+    setMembers(prev => prev.map(m => m.id === confirmDelete.id ? { ...m, active: false } : m))
+    setConfirmDelete(null)
+    setDeleting(false)
+  }
+
+  const openResetModal = (member: Member) => {
+    setResetTarget(member)
+    setResetForm(emptyResetForm)
+    setResetError('')
+    setResetSaved(false)
+    setShowResetPass(false)
+    setResetModal(true)
+  }
+
+  const handleResetPassword = async () => {
+    setResetError('')
+    if (!resetForm.newPassword || resetForm.newPassword.length < 6) return setResetError('A senha deve ter pelo menos 6 caracteres')
+    if (resetForm.newPassword !== resetForm.confirmPassword) return setResetError('As senhas não coincidem')
+    setResetSaving(true)
+    try {
+      const res = await fetch(`/api/team/${resetTarget!.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword: resetForm.newPassword }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setResetError(data.error ?? 'Erro ao resetar senha'); setResetSaving(false); return }
+      setResetSaved(true)
+      setTimeout(() => { setResetModal(false); setResetSaved(false); setResetSaving(false) }, 1200)
+    } catch {
+      setResetError('Erro de conexão')
+      setResetSaving(false)
+    }
+  }
+
+  const activeMembers = members.filter(m => m.active)
+  const adminCount = activeMembers.filter(m => m.role === 'admin').length
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Equipe"
-        description="Gerencie sua equipe de vendas e marketing"
+        description="Gerencie os membros e permissões de acesso"
         breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Equipe' }]}
         actions={
-          <button onClick={() => setInviteModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors">
-            <Plus className="w-4 h-4" /> Convidar Membro
-          </button>
+          isAdmin ? (
+            <button
+              onClick={() => { setInviteModal(true); setForm(emptyForm); setError('') }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Convidar Membro
+            </button>
+          ) : undefined
         }
       />
 
-      <div className="flex gap-1 p-1 rounded-xl bg-white/5 border border-white/10 w-fit">
-        {[{ key: 'all', label: 'Todos' }, { key: 'sales', label: 'Vendas' }, { key: 'marketing', label: 'Marketing' }, { key: 'cs', label: 'CS' }, { key: 'admin', label: 'Admin' }].map(t => (
-          <button key={t.key} onClick={() => setActiveTab(t.key)}
-            className={cn('px-4 py-1.5 rounded-lg text-sm font-medium transition-all', activeTab === t.key ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-white/5')}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-        {filtered.map(m => (
-          <div key={m.id} className="rounded-2xl border border-white/10 bg-white/3 p-5 backdrop-blur-sm hover:border-white/20 transition-all duration-200">
-            <div className="flex flex-col items-center text-center mb-4">
-              <div className={cn('w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center text-lg font-bold text-white mb-3', m.gradient)}>{m.avatar}</div>
-              <p className="text-sm font-semibold text-white">{m.name}</p>
-              <span className={cn('mt-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium border', deptColors[m.department])}>{m.role}</span>
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'Total de membros', value: activeMembers.length, icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+          { label: 'Administradores', value: adminCount, icon: ShieldCheck, color: 'text-violet-400', bg: 'bg-violet-500/10' },
+          { label: 'Membros personalizados', value: activeMembers.filter(m => m.role !== 'admin').length, icon: User, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+          { label: 'Inativos', value: members.filter(m => !m.active).length, icon: Shield, color: 'text-slate-400', bg: 'bg-slate-500/10' },
+        ].map(({ label, value, icon: Icon, color, bg }) => (
+          <div key={label} className="rounded-2xl border border-white/8 bg-white/3 p-4 flex items-center gap-3">
+            <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', bg)}>
+              <Icon className={cn('w-4 h-4', color)} />
             </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <Mail className="w-3.5 h-3.5 shrink-0 text-slate-500" />
-                <span className="truncate">{m.email}</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <Target className="w-3.5 h-3.5 shrink-0 text-slate-500" />
-                <span>{m.metric}</span>
-              </div>
-              {m.revenue && (
-                <div className="flex items-center gap-2 text-xs text-green-400 font-medium">
-                  <DollarSign className="w-3.5 h-3.5 shrink-0" />
-                  <span>{m.revenue}</span>
-                </div>
-              )}
+            <div>
+              <p className="text-xs text-slate-500">{label}</p>
+              <p className="text-lg font-semibold text-white">{value}</p>
             </div>
-
-            <div className="mt-3 mb-1">
-              <div className="flex justify-between text-[10px] text-slate-500 mb-1">
-                <span>Meta</span>
-                <span>{m.goalPct}%</span>
-              </div>
-              <div className="h-1 rounded-full bg-white/10">
-                <div className={cn('h-full rounded-full', m.goalPct >= 80 ? 'bg-green-500' : m.goalPct >= 60 ? 'bg-yellow-500' : 'bg-red-500')} style={{ width: `${m.goalPct}%` }} />
-              </div>
-            </div>
-
-            <button onClick={() => setProfileMember(m)} className="mt-3 w-full py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
-              Ver perfil
-            </button>
           </div>
         ))}
       </div>
 
-      {/* Profile modal */}
-      <Modal open={!!profileMember} onClose={() => setProfileMember(null)} title="Perfil do Membro">
-        {profileMember && (
+      {/* Members grid */}
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="rounded-2xl border border-white/8 bg-white/3 p-5 animate-pulse h-40" />
+          ))}
+        </div>
+      ) : activeMembers.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
+            <Users className="w-8 h-8 text-slate-600" />
+          </div>
+          <p className="text-slate-300 font-medium">Nenhum membro ainda</p>
+          {isAdmin && (
+            <button onClick={() => setInviteModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors">
+              <Plus className="w-4 h-4" /> Convidar primeiro membro
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {activeMembers.map(m => {
+            const isMe = m.id === me?.id
+            const isProtected = m.email?.toLowerCase() === PROTECTED_EMAIL.toLowerCase()
+            const isAdminMember = m.role === 'admin'
+            const permCount = isAdminMember ? ALL_PERMISSIONS.length : m.permissions?.length ?? 0
+            return (
+              <div key={m.id} className="rounded-2xl border border-white/8 bg-white/3 p-5 hover:border-white/15 transition-all group">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={cn('w-11 h-11 rounded-xl bg-gradient-to-br flex items-center justify-center text-sm font-bold text-white shrink-0', getGradient(m.name))}>
+                      {getInitials(m.name)}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-white flex items-center gap-1.5">
+                        {m.name}
+                        {isMe && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400">você</span>}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">{m.email}</p>
+                    </div>
+                  </div>
+                  {isAdmin && !isMe && (
+                    isProtected ? (
+                      <div title="Conta protegida" className="p-1.5 text-slate-700">
+                        <Lock className="w-3.5 h-3.5" />
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => requestRemove(m)}
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )
+                  )}
+                </div>
+
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center justify-between">
+                    <span className={cn(
+                      'px-2 py-0.5 rounded-full border text-[11px] font-medium',
+                      isAdminMember
+                        ? 'bg-violet-500/15 text-violet-400 border-violet-500/20'
+                        : 'bg-slate-500/15 text-slate-400 border-slate-500/20'
+                    )}>
+                      {isAdminMember ? '👑 Administrador' : m.custom_role || 'Membro'}
+                    </span>
+                    <span className="text-xs text-slate-500">{permCount}/{ALL_PERMISSIONS.length} permissões</span>
+                  </div>
+
+                  {/* Permission summary pills */}
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {isAdminMember ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                        Acesso total
+                      </span>
+                    ) : (
+                      PERMISSION_GROUPS.filter(g => g.items.some(i => m.permissions?.includes(i.key))).slice(0, 4).map(g => (
+                        <span key={g.key} className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-slate-400 border border-white/8">
+                          {g.label}
+                        </span>
+                      ))
+                    )}
+                    {!isAdminMember && PERMISSION_GROUPS.filter(g => g.items.some(i => m.permissions?.includes(i.key))).length > 4 && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-slate-400 border border-white/8">
+                        +{PERMISSION_GROUPS.filter(g => g.items.some(i => m.permissions?.includes(i.key))).length - 4}
+                      </span>
+                    )}
+                    {!isAdminMember && m.permissions?.length === 0 && (
+                      <span className="text-[10px] text-slate-600">Sem permissões</span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setViewMember(m)}
+                  className="w-full py-2 rounded-xl bg-white/5 border border-white/8 text-xs text-slate-400 hover:text-white hover:bg-white/8 transition-colors"
+                >
+                  Ver permissões
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ─── View Member Modal ─── */}
+      <Modal open={!!viewMember} onClose={() => setViewMember(null)} title="Detalhes do Membro" wide>
+        {viewMember && (
           <div className="space-y-5">
             <div className="flex items-center gap-4">
-              <div className={cn('w-16 h-16 rounded-2xl bg-gradient-to-br flex items-center justify-center text-xl font-bold text-white shrink-0', profileMember.gradient)}>{profileMember.avatar}</div>
+              <div className={cn('w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center text-lg font-bold text-white shrink-0', getGradient(viewMember.name))}>
+                {getInitials(viewMember.name)}
+              </div>
               <div>
-                <p className="text-base font-semibold text-white">{profileMember.name}</p>
-                <span className={cn('inline-block mt-1 px-2 py-0.5 rounded-md text-[11px] font-medium border', deptColors[profileMember.department])}>{profileMember.role}</span>
-                <p className="text-xs text-slate-500 mt-1">Desde {profileMember.joinedAt}</p>
+                <p className="text-base font-semibold text-white">{viewMember.name}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <Mail className="w-3 h-3 text-slate-500" />
+                  <p className="text-xs text-slate-400">{viewMember.email}</p>
+                </div>
+                <span className={cn(
+                  'inline-block mt-1.5 px-2 py-0.5 rounded-full border text-[11px] font-medium',
+                  viewMember.role === 'admin'
+                    ? 'bg-violet-500/15 text-violet-400 border-violet-500/20'
+                    : 'bg-slate-500/15 text-slate-400 border-slate-500/20'
+                )}>
+                  {viewMember.role === 'admin' ? '👑 Administrador' : viewMember.custom_role || 'Membro'}
+                </span>
               </div>
             </div>
 
-            <p className="text-sm text-slate-400 leading-relaxed">{profileMember.bio}</p>
+            <div className="border-t border-white/8 pt-4">
+              <p className="text-xs font-medium text-slate-400 mb-3 uppercase tracking-wide">
+                Permissões {viewMember.role === 'admin' ? '— Acesso total' : `— ${viewMember.permissions?.length ?? 0} de ${ALL_PERMISSIONS.length}`}
+              </p>
+              <div className="space-y-2">
+                {PERMISSION_GROUPS.map(group => {
+                  const activeItems = viewMember.role === 'admin'
+                    ? group.items
+                    : group.items.filter(i => viewMember.permissions?.includes(i.key))
+                  if (activeItems.length === 0) return null
+                  const Icon = group.icon
+                  return (
+                    <div key={group.key} className="rounded-xl border border-white/8 bg-white/3 px-4 py-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Icon className="w-3.5 h-3.5 text-slate-500" />
+                        <span className="text-xs font-medium text-slate-300">{group.label}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {activeItems.map(item => (
+                          <span key={item.key} className="text-[11px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                            {item.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
 
-            <div className="grid grid-cols-1 gap-2">
-              <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                <Mail className="w-4 h-4 text-slate-500 shrink-0" />
-                <span className="text-sm text-slate-300">{profileMember.email}</span>
+            {isAdmin && viewMember.id !== me?.id && (
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => { setViewMember(null); openResetModal(viewMember) }}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400 text-sm font-medium hover:bg-amber-500/20 transition-colors"
+                >
+                  <KeyRound className="w-4 h-4" /> Resetar senha
+                </button>
+                {viewMember.email?.toLowerCase() === PROTECTED_EMAIL.toLowerCase() ? (
+                  <div className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/8 bg-white/3 text-slate-600 text-sm font-medium cursor-not-allowed">
+                    <Lock className="w-4 h-4" /> Protegida
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => requestRemove(viewMember)}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-400 text-sm font-medium hover:bg-red-500/20 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" /> Desativar
+                  </button>
+                )}
               </div>
-              <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                <Phone className="w-4 h-4 text-slate-500 shrink-0" />
-                <span className="text-sm text-slate-300">{profileMember.phone}</span>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* ─── Reset Password Modal ─── */}
+      <Modal open={resetModal} onClose={() => setResetModal(false)} title="Resetar senha">
+        {resetTarget && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-amber-500/25 bg-amber-500/8 p-4 flex items-start gap-3">
+              <KeyRound className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-amber-300">Resetar senha de {resetTarget.name}</p>
+                <p className="text-xs text-amber-400/80 mt-0.5 leading-relaxed">
+                  Defina uma senha temporária. O membro será obrigado a criar uma nova senha no próximo login.
+                </p>
               </div>
-              <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                <Target className="w-4 h-4 text-slate-500 shrink-0" />
-                <span className="text-sm text-slate-300">{profileMember.metric}</span>
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 mb-1.5 block">Senha temporária</label>
+              <div className="relative">
+                <input
+                  type={showResetPass ? 'text' : 'password'}
+                  placeholder="Mínimo 6 caracteres"
+                  value={resetForm.newPassword}
+                  onChange={e => setResetForm(p => ({ ...p, newPassword: e.target.value }))}
+                  className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 pr-10 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/60 transition-colors"
+                />
+                <button type="button" onClick={() => setShowResetPass(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                  {showResetPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
-              {profileMember.revenue && (
-                <div className="flex items-center gap-3 py-2.5 border-b border-white/5">
-                  <DollarSign className="w-4 h-4 text-slate-500 shrink-0" />
-                  <span className="text-sm text-green-400 font-medium">{profileMember.revenue}</span>
-                </div>
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 mb-1.5 block">Confirmar senha temporária</label>
+              <input
+                type={showResetPass ? 'text' : 'password'}
+                placeholder="Repita a senha"
+                value={resetForm.confirmPassword}
+                onChange={e => setResetForm(p => ({ ...p, confirmPassword: e.target.value }))}
+                className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-500/60 transition-colors"
+              />
+            </div>
+
+            {resetError && (
+              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{resetError}</p>
+            )}
+
+            <button
+              onClick={handleResetPassword}
+              disabled={resetSaving}
+              className={cn(
+                'w-full h-10 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2',
+                resetSaved ? 'bg-emerald-600 text-white' : 'bg-amber-600 hover:bg-amber-500 text-white disabled:opacity-50'
               )}
-            </div>
+            >
+              {resetSaved
+                ? <><CheckCircle2 className="w-4 h-4" /> Senha resetada!</>
+                : resetSaving ? 'Resetando...'
+                : <><KeyRound className="w-4 h-4" /> Resetar senha</>
+              }
+            </button>
+          </div>
+        )}
+      </Modal>
 
-            <div className="rounded-xl border border-white/10 bg-white/3 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-blue-400" />
-                  <span className="text-sm font-medium text-white">Meta do mês</span>
-                </div>
-                <span className="text-sm font-bold text-white">{profileMember.goalPct}%</span>
+      {/* ─── Confirm Delete Modal ─── */}
+      <Modal open={!!confirmDelete} onClose={() => !deleting && setConfirmDelete(null)} title="Confirmar desativação">
+        {confirmDelete && (
+          <div className="space-y-5">
+            <div className="flex items-start gap-4">
+              <div className="w-11 h-11 rounded-xl bg-red-500/15 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
               </div>
-              <p className="text-xs text-slate-500 mb-2">{profileMember.goal}</p>
-              <div className="h-2 rounded-full bg-white/10">
-                <div className={cn('h-full rounded-full transition-all', profileMember.goalPct >= 80 ? 'bg-green-500' : profileMember.goalPct >= 60 ? 'bg-yellow-500' : 'bg-red-500')} style={{ width: `${profileMember.goalPct}%` }} />
+              <div>
+                <p className="text-sm text-slate-200 leading-relaxed">
+                  Tem certeza que deseja desativar a conta de{' '}
+                  <span className="font-semibold text-white">{confirmDelete.name}</span>?
+                </p>
+                <p className="text-xs text-slate-500 mt-1">{confirmDelete.email}</p>
+                <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                  O membro perderá o acesso ao sistema imediatamente.
+                </p>
               </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                disabled={deleting}
+                className="flex-1 h-10 rounded-xl border border-white/10 bg-white/5 text-slate-300 text-sm font-medium hover:bg-white/8 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleRemove}
+                disabled={deleting}
+                className="flex-1 h-10 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deleting ? 'Desativando...' : <><Trash2 className="w-4 h-4" /> Sim, desativar</>}
+              </button>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Invite modal */}
-      <Modal open={inviteModal} onClose={() => setInviteModal(false)} title="Convidar Membro">
-        <div className="space-y-4">
+      {/* ─── Invite Modal ─── */}
+      <Modal open={inviteModal} onClose={() => setInviteModal(false)} title="Convidar Membro" wide>
+        <div className="space-y-5">
+          {/* Basic info */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-400 mb-1.5 block">Nome completo *</label>
+              <input
+                placeholder="João Silva"
+                value={form.name}
+                onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/60 transition-colors"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 mb-1.5 block">Cargo / Função</label>
+              <input
+                placeholder="Ex: Vendedor, SDR..."
+                value={form.custom_role}
+                onChange={e => setForm(p => ({ ...p, custom_role: e.target.value }))}
+                className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/60 transition-colors"
+              />
+            </div>
+          </div>
+
           <div>
-            <label className="text-xs text-slate-400 mb-1.5 block">Nome completo</label>
-            <input placeholder="Ex: João Silva" value={inviteForm.name} onChange={e => setInviteForm(p => ({ ...p, name: e.target.value }))}
-              className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/60 transition-colors" />
+            <label className="text-xs text-slate-400 mb-1.5 block">Email *</label>
+            <input
+              type="email"
+              placeholder="joao@empresa.com"
+              value={form.email}
+              onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+              className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/60 transition-colors"
+            />
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-400 mb-1.5 block">Senha *</label>
+              <div className="relative">
+                <input
+                  type={showPass ? 'text' : 'password'}
+                  placeholder="Mínimo 6 caracteres"
+                  value={form.password}
+                  onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                  className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 pr-10 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/60 transition-colors"
+                />
+                <button type="button" onClick={() => setShowPass(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 mb-1.5 block">Confirmar senha *</label>
+              <input
+                type={showPass ? 'text' : 'password'}
+                placeholder="Repita a senha"
+                value={form.confirmPassword}
+                onChange={e => setForm(p => ({ ...p, confirmPassword: e.target.value }))}
+                className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/60 transition-colors"
+              />
+            </div>
+          </div>
+
+          {/* Role selector */}
           <div>
-            <label className="text-xs text-slate-400 mb-1.5 block">Email</label>
-            <input type="email" placeholder="joao@empresa.com" value={inviteForm.email} onChange={e => setInviteForm(p => ({ ...p, email: e.target.value }))}
-              className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/60 transition-colors" />
+            <label className="text-xs text-slate-400 mb-2 block">Tipo de acesso *</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setForm(p => ({ ...p, role: 'admin' }))}
+                className={cn(
+                  'flex items-center gap-3 p-3 rounded-xl border transition-all text-left',
+                  form.role === 'admin'
+                    ? 'border-violet-500/40 bg-violet-500/10'
+                    : 'border-white/10 bg-white/3 hover:border-white/20'
+                )}
+              >
+                <ShieldCheck className={cn('w-5 h-5 shrink-0', form.role === 'admin' ? 'text-violet-400' : 'text-slate-500')} />
+                <div>
+                  <p className={cn('text-sm font-medium', form.role === 'admin' ? 'text-violet-300' : 'text-slate-300')}>Administrador</p>
+                  <p className="text-[11px] text-slate-500">Acesso total ao sistema</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm(p => ({ ...p, role: 'custom', permissions: [] }))}
+                className={cn(
+                  'flex items-center gap-3 p-3 rounded-xl border transition-all text-left',
+                  form.role === 'custom'
+                    ? 'border-blue-500/40 bg-blue-500/10'
+                    : 'border-white/10 bg-white/3 hover:border-white/20'
+                )}
+              >
+                <User className={cn('w-5 h-5 shrink-0', form.role === 'custom' ? 'text-blue-400' : 'text-slate-500')} />
+                <div>
+                  <p className={cn('text-sm font-medium', form.role === 'custom' ? 'text-blue-300' : 'text-slate-300')}>Personalizado</p>
+                  <p className="text-[11px] text-slate-500">Escolha cada permissão</p>
+                </div>
+              </button>
+            </div>
           </div>
+
+          {/* Permissions */}
           <div>
-            <label className="text-xs text-slate-400 mb-1.5 block">Cargo</label>
-            <select value={inviteForm.role} onChange={e => setInviteForm(p => ({ ...p, role: e.target.value }))}
-              className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white focus:outline-none focus:border-blue-500/60 transition-colors">
-              {roles.map(r => <option key={r} value={r} className="bg-[#0d1425]">{r}</option>)}
-            </select>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs text-slate-400 uppercase tracking-wide font-medium">
+                {form.role === 'admin' ? 'Permissões — todas ativadas' : `Permissões — ${form.permissions.length} de ${ALL_PERMISSIONS.length} selecionadas`}
+              </label>
+              {form.role === 'custom' && (
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setForm(p => ({ ...p, permissions: ALL_PERMISSIONS }))} className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors">Selecionar tudo</button>
+                  <span className="text-slate-700">·</span>
+                  <button type="button" onClick={() => setForm(p => ({ ...p, permissions: [] }))} className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors">Limpar</button>
+                </div>
+              )}
+            </div>
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {PERMISSION_GROUPS.map(group => (
+                <PermissionGroup
+                  key={group.key}
+                  group={group}
+                  selected={form.role === 'admin' ? ALL_PERMISSIONS : form.permissions}
+                  onChange={togglePermission}
+                  disabled={form.role === 'admin'}
+                />
+              ))}
+            </div>
           </div>
-          <div>
-            <label className="text-xs text-slate-400 mb-1.5 block">Departamento</label>
-            <select value={inviteForm.department} onChange={e => setInviteForm(p => ({ ...p, department: e.target.value }))}
-              className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white focus:outline-none focus:border-blue-500/60 transition-colors">
-              {departments.map(d => <option key={d} value={d} className="bg-[#0d1425]">{deptLabel[d]}</option>)}
-            </select>
-          </div>
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
-            <p className="text-xs text-slate-400">Um email de convite será enviado para o endereço informado com as instruções de acesso.</p>
-          </div>
-          <button onClick={handleInvite} className={cn('w-full h-10 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2', invited ? 'bg-green-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white')}>
-            {invited ? <><CheckCircle2 className="w-4 h-4" /> Convite enviado!</> : 'Enviar Convite'}
+
+          {error && (
+            <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{error}</p>
+          )}
+
+          <button
+            onClick={handleCreate}
+            disabled={saving}
+            className={cn(
+              'w-full h-11 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2',
+              saved ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50'
+            )}
+          >
+            {saved
+              ? <><CheckCircle2 className="w-4 h-4" /> Membro criado!</>
+              : saving
+                ? 'Criando...'
+                : <><Plus className="w-4 h-4" /> Criar membro</>
+            }
           </button>
         </div>
       </Modal>
