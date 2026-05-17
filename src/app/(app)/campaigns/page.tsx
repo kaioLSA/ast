@@ -41,7 +41,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 const allCampaigns: Campaign[] = [
   ...mockCampaigns.map(c => ({
     id: c.id, name: c.name, platform: c.platform, status: c.status,
-    budget: { spent: c.budget.spent, total: c.budget.total },
+    budget: { spent: c.budget.spent, total: c.budget.total ?? 0 },
     metrics: { impressions: c.metrics.impressions, ctr: c.metrics.ctr, conversions: c.metrics.conversions, roas: c.metrics.roas, clicks: c.metrics.clicks, reach: c.metrics.reach, cpc: c.metrics.cpc },
   })),
   ...extraCampaigns,

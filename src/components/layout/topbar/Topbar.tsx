@@ -169,7 +169,7 @@ export function Topbar() {
                         <div className="flex items-center gap-2 mt-1.5">
                           {n.action && (
                             <Link
-                              href={n.action.href}
+                              href={n.action.href as never}
                               onClick={() => { markAsRead(n.id); setOpen(false) }}
                               className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
                             >

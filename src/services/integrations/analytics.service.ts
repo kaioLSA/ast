@@ -1,7 +1,7 @@
 import { get } from '@/services/api/api'
 import { endpoints } from '@/services/api/endpoints'
 import type { DashboardAnalytics } from '@/types/analytics.types'
-import type { ApiResponse, MetricPeriod } from '@/types/global.types'
+import type { ApiResponse } from '@/types/global.types'
 
 export async function getDashboardAnalytics(period: string = '30d'): Promise<ApiResponse<DashboardAnalytics>> {
   return get(endpoints.analytics.dashboard, { period } as never)

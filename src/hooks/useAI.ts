@@ -54,7 +54,7 @@ export function useAI() {
   }, [setLoading, setInsights])
 
   const fetchSuggestions = useCallback(async (context: string) => {
-    const res = await getSuggestions(context)
+    const res = await getAISuggestions(context)
     setSuggestions(res.data)
   }, [setSuggestions])
 
