@@ -81,6 +81,7 @@ export default function WhatsappPage() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [search, setSearch] = useState('')
+  const [tab, setTab] = useState<'chats' | 'groups'>('chats')
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -176,8 +177,14 @@ export default function WhatsappPage() {
 
   const selectedChat = chats.find(c => c.id === selectedId)
   const filtered = chats.filter(c =>
-    !search || c.name.toLowerCase().includes(search.toLowerCase())
+    c.isGroup === (tab === 'groups') &&
+    (!search || c.name.toLowerCase().includes(search.toLowerCase()))
   )
+
+  const individualChats = chats.filter(c => !c.isGroup)
+  const groupChats = chats.filter(c => c.isGroup)
+  const individualUnread = individualChats.reduce((s, c) => s + (c.unread || 0), 0)
+  const groupUnread = groupChats.reduce((s, c) => s + (c.unread || 0), 0)
 
   return (
     <div className="space-y-6">
@@ -202,13 +209,58 @@ export default function WhatsappPage() {
       >
         {/* ── Chat list ── */}
         <div className="w-80 shrink-0 border-r border-white/10 flex flex-col">
+          {/* Tabs */}
+          <div className="flex border-b border-white/10">
+            <button
+              onClick={() => { setTab('chats'); setSelectedId(null) }}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold transition-colors relative',
+                tab === 'chats'
+                  ? 'text-white'
+                  : 'text-slate-500 hover:text-slate-300',
+              )}
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              Conversas
+              {individualUnread > 0 && (
+                <span className="min-w-[16px] h-4 rounded-full bg-green-500 text-white text-[9px] flex items-center justify-center font-bold px-1">
+                  {individualUnread > 9 ? '9+' : individualUnread}
+                </span>
+              )}
+              {tab === 'chats' && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t-full" />
+              )}
+            </button>
+            <button
+              onClick={() => { setTab('groups'); setSelectedId(null) }}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold transition-colors relative',
+                tab === 'groups'
+                  ? 'text-white'
+                  : 'text-slate-500 hover:text-slate-300',
+              )}
+            >
+              <Users className="w-3.5 h-3.5" />
+              Grupos
+              {groupUnread > 0 && (
+                <span className="min-w-[16px] h-4 rounded-full bg-green-500 text-white text-[9px] flex items-center justify-center font-bold px-1">
+                  {groupUnread > 9 ? '9+' : groupUnread}
+                </span>
+              )}
+              {tab === 'groups' && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t-full" />
+              )}
+            </button>
+          </div>
+
+          {/* Search */}
           <div className="p-3 border-b border-white/10">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Buscar conversas..."
+                placeholder={tab === 'chats' ? 'Buscar conversas...' : 'Buscar grupos...'}
                 className="w-full pl-8 pr-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500/50"
               />
             </div>
@@ -233,8 +285,13 @@ export default function WhatsappPage() {
               </div>
             ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-500">
-                <MessageCircle className="w-8 h-8 text-slate-600" />
-                <p className="text-xs">Nenhuma conversa encontrada</p>
+                {tab === 'groups'
+                  ? <Users className="w-8 h-8 text-slate-600" />
+                  : <MessageCircle className="w-8 h-8 text-slate-600" />
+                }
+                <p className="text-xs">
+                  {tab === 'groups' ? 'Nenhum grupo encontrado' : 'Nenhuma conversa encontrada'}
+                </p>
               </div>
             ) : (
               filtered.map(c => (
@@ -290,9 +347,19 @@ export default function WhatsappPage() {
           {/* Stats bar */}
           {!chatsLoading && !chatsError && (
             <div className="px-4 py-2 border-t border-white/10 flex items-center gap-3 text-[11px] text-slate-500">
-              <span>{chats.length} conversas</span>
-              <span>·</span>
-              <span>{chats.filter(c => c.unread > 0).length} não lidas</span>
+              {tab === 'chats' ? (
+                <>
+                  <span>{individualChats.length} conversas</span>
+                  <span>·</span>
+                  <span>{individualChats.filter(c => c.unread > 0).length} não lidas</span>
+                </>
+              ) : (
+                <>
+                  <span>{groupChats.length} grupos</span>
+                  <span>·</span>
+                  <span>{groupChats.filter(c => c.unread > 0).length} não lidos</span>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -302,9 +369,14 @@ export default function WhatsappPage() {
           {!selectedChat ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-500">
               <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
-                <MessageCircle className="w-8 h-8 text-slate-600" />
+                {tab === 'groups'
+                  ? <Users className="w-8 h-8 text-slate-600" />
+                  : <MessageCircle className="w-8 h-8 text-slate-600" />
+                }
               </div>
-              <p className="text-sm">Selecione uma conversa</p>
+              <p className="text-sm">
+                {tab === 'groups' ? 'Selecione um grupo' : 'Selecione uma conversa'}
+              </p>
             </div>
           ) : (
             <>
