@@ -57,7 +57,8 @@ export async function GET() {
 
         const ts = c.updatedAt ? new Date(c.updatedAt).getTime() / 1000 : 0
 
-        return { id: jid, name, lastMsg: lastText, timestamp: ts, unread: c.unreadMessages ?? 0, isGroup }
+        const lastFromMe = lm?.key?.fromMe ?? true
+        return { id: jid, name, lastMsg: lastText, timestamp: ts, unread: c.unreadMessages ?? 0, isGroup, lastFromMe }
       })
       .sort((a: { timestamp: number }, b: { timestamp: number }) => b.timestamp - a.timestamp)
 

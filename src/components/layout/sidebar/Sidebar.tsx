@@ -34,8 +34,8 @@ export function Sidebar() {
   const { isCollapsed, toggle } = useSidebar()
   const { logout } = useAuthContext()
   const { user } = useAuthStore()
-  const { totalUnread } = useWhatsAppStore()
-  const waBadge = totalUnread > 4 ? '4+' : totalUnread > 0 ? String(totalUnread) : null
+  const { pendingCount } = useWhatsAppStore()
+  const waBadge = pendingCount > 4 ? '4+' : pendingCount > 0 ? String(pendingCount) : null
 
   return (
     <aside

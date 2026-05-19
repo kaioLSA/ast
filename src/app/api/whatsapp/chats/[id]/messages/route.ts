@@ -59,9 +59,9 @@ export async function GET(
       }
 
       const ts = m.messageTimestamp || (m.updatedAt ? Math.floor(new Date(m.updatedAt).getTime() / 1000) : 0)
-      const time = new Date(ts * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
-      return { id: msgId, from: fromMe ? 'me' : 'them', text, time, timestamp: ts }
+      // time is formatted client-side (browser timezone) — server just returns raw timestamp
+      return { id: msgId, from: fromMe ? 'me' : 'them', text, time: '', timestamp: ts }
     }).sort((a, b) => a.timestamp - b.timestamp)
 
     return NextResponse.json(mapped)

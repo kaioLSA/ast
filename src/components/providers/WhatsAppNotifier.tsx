@@ -11,11 +11,12 @@ type Chat = {
   timestamp: number
   unread: number
   isGroup: boolean
+  lastFromMe: boolean
 }
 
-// ── Favicon dot ──────────────────────────────────────────────────────────────
+// ── Favicon dot ───────────────────────────────────────────────────────────────
 
-let originalFavicon = ''
+let _originalHref = ''
 
 function setFaviconDot(hasDot: boolean) {
   if (typeof document === 'undefined') return
@@ -28,11 +29,11 @@ function setFaviconDot(hasDot: boolean) {
   }
 
   if (!hasDot) {
-    if (originalFavicon) link.href = originalFavicon
+    if (_originalHref) link.href = _originalHref
     return
   }
 
-  if (!originalFavicon) originalFavicon = link.href || '/favicon.ico'
+  if (!_originalHref) _originalHref = link.href || '/favicon.ico'
 
   const canvas = document.createElement('canvas')
   canvas.width = 32
@@ -40,11 +41,7 @@ function setFaviconDot(hasDot: boolean) {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
-  const img = new Image()
-  img.crossOrigin = 'anonymous'
-
   const drawDot = () => {
-    // Green dot — top-right corner
     ctx.beginPath()
     ctx.arc(26, 6, 7, 0, 2 * Math.PI)
     ctx.fillStyle = '#22c55e'
@@ -55,25 +52,22 @@ function setFaviconDot(hasDot: boolean) {
     link!.href = canvas.toDataURL('image/png')
   }
 
-  img.onload = () => {
-    ctx.drawImage(img, 0, 0, 32, 32)
-    drawDot()
-  }
-  img.onerror = drawDot // if favicon fails to load, just draw the dot anyway
-
-  img.src = originalFavicon
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.onload = () => { ctx.drawImage(img, 0, 0, 32, 32); drawDot() }
+  img.onerror = drawDot
+  img.src = _originalHref
 }
 
-// ── Browser notification ──────────────────────────────────────────────────────
+// ── Browser popup notification ────────────────────────────────────────────────
 
-function notify(senderName: string) {
+function fireNotification(senderName: string) {
   if (typeof Notification === 'undefined') return
   if (Notification.permission !== 'granted') return
-
   new Notification('💬 Nova mensagem no WhatsApp', {
     body: senderName,
     icon: '/st.png',
-    tag: `wa-${senderName}`, // deduplicate per sender
+    tag: `wa-${senderName}`,
     silent: false,
   })
 }
@@ -81,14 +75,28 @@ function notify(senderName: string) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function WhatsAppNotifier() {
-  const { setTotalUnread } = useWhatsAppStore()
+  const { setTotalUnread, pendingCount, incrementPending, clearPending } = useWhatsAppStore()
   const pathname = usePathname()
   const pathnameRef = useRef(pathname)
   const prevTimestamps = useRef<Record<string, number>>({})
   const initialized = useRef(false)
 
-  // Keep pathnameRef current without restarting the effect
+  // Keep pathname ref fresh without restarting the poll interval
   useEffect(() => { pathnameRef.current = pathname }, [pathname])
+
+  // Clear pending badge when user is on the WhatsApp page
+  useEffect(() => {
+    if (pathname.startsWith('/whatsapp')) {
+      clearPending()
+      setFaviconDot(false)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname])
+
+  // Update favicon whenever pendingCount changes
+  useEffect(() => {
+    setFaviconDot(pendingCount > 0)
+  }, [pendingCount])
 
   // Request notification permission once on mount
   useEffect(() => {
@@ -106,31 +114,37 @@ export function WhatsAppNotifier() {
         const chats: Chat[] = await res.json()
         if (!Array.isArray(chats)) return
 
-        // Update global unread badge in sidebar
+        // Keep total unread from API (may be 0 if Evolution doesn't support it)
         const total = chats.reduce((s, c) => s + (c.unread || 0), 0)
         setTotalUnread(total)
-        setFaviconDot(total > 0)
 
         const onWAPage = pathnameRef.current.startsWith('/whatsapp')
 
         if (initialized.current) {
           for (const chat of chats) {
             const prev = prevTimestamps.current[chat.id]
-            // Timestamp increased = new message arrived
-            if (prev !== undefined && chat.timestamp > prev && !onWAPage) {
-              notify(chat.name)
+            const isNewer = prev !== undefined && chat.timestamp > prev
+            // Only count as new if the last message came FROM the other person
+            const isIncoming = !chat.lastFromMe
+
+            if (isNewer && isIncoming) {
+              incrementPending()
+              // Popup notification only when NOT on the WhatsApp page
+              if (!onWAPage) {
+                fireNotification(chat.name)
+              }
             }
             prevTimestamps.current[chat.id] = chat.timestamp
           }
         } else {
-          // First load — snapshot timestamps without notifying
+          // First load — snapshot without notifying
           for (const chat of chats) {
             prevTimestamps.current[chat.id] = chat.timestamp
           }
           initialized.current = true
         }
       } catch {
-        // ignore polling errors silently
+        // ignore silently
       }
     }
 
@@ -138,7 +152,7 @@ export function WhatsAppNotifier() {
     const id = setInterval(poll, 15_000)
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setTotalUnread])
+  }, [setTotalUnread, incrementPending])
 
-  return null // purely side-effect component
+  return null
 }

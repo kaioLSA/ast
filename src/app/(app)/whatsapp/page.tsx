@@ -14,6 +14,7 @@ type Chat = {
   timestamp: number
   unread: number
   isGroup: boolean
+  lastFromMe: boolean
 }
 
 type Msg = {
@@ -28,11 +29,19 @@ function timeLabel(ts: number) {
   if (!ts) return ''
   const d = new Date(ts * 1000)
   const now = new Date()
-  const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000)
+  const diff = now.getTime() - d.getTime()
+  // Slightly in the future (clock skew) → treat as now
+  if (diff < 0) return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  const diffDays = Math.floor(diff / 86400000)
   if (diffDays === 0) return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   if (diffDays === 1) return 'Ontem'
   if (diffDays < 7) return `${diffDays}d`
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+}
+
+function formatMsgTime(ts: number) {
+  if (!ts) return ''
+  return new Date(ts * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
 function initials(name: string) {
@@ -56,7 +65,10 @@ function chatGradient(id: string) {
 
 export default function WhatsappPage() {
   usePageTitle('WhatsApp')
-  const { setTotalUnread } = useWhatsAppStore()
+  const { setTotalUnread, clearPending } = useWhatsAppStore()
+
+  // Clear sidebar badge when entering WhatsApp page
+  useEffect(() => { clearPending() }, [clearPending])
 
   const [chats, setChats] = useState<Chat[]>([])
   const [chatsLoading, setChatsLoading] = useState(true)
@@ -139,7 +151,7 @@ export default function WhatsappPage() {
       id: `opt-${Date.now()}`,
       from: 'me',
       text,
-      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      time: '',
       timestamp: Math.floor(Date.now() / 1000),
     }
 
@@ -324,7 +336,7 @@ export default function WhatsappPage() {
                       )}>
                         <p className="break-words whitespace-pre-wrap">{m.text}</p>
                         <p className={cn('text-[10px] mt-1', m.from === 'me' ? 'text-green-200 text-right' : 'text-slate-500')}>
-                          {m.time}
+                          {formatMsgTime(m.timestamp)}
                         </p>
                       </div>
                     </div>
