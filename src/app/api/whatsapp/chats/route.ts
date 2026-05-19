@@ -39,9 +39,11 @@ export async function GET() {
         const jid = c.remoteJid!
         const isGroup = jid.endsWith('@g.us')
         const number = jid.split('@')[0]
-        // Groups: prefer explicit subject/name fields; individuals: use pushName
+        // Groups: pushName holds the group subject in Evolution API;
+        // name/subject are checked first in case newer API versions populate them.
+        // For individuals: also fall back to lastMessage.pushName.
         const name = isGroup
-          ? (c.name || c.subject || number)
+          ? (c.name || c.subject || c.pushName || number)
           : (c.pushName || c.lastMessage?.pushName || number)
 
         const lm = c.lastMessage
