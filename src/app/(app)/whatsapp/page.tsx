@@ -65,7 +65,7 @@ function chatGradient(id: string) {
 
 export default function WhatsappPage() {
   usePageTitle('WhatsApp')
-  const { setTotalUnread, clearPending } = useWhatsAppStore()
+  const { setTotalUnread, clearPending, localUnread, clearChatUnread } = useWhatsAppStore()
 
   // Clear sidebar badge when entering WhatsApp page
   useEffect(() => { clearPending() }, [clearPending])
@@ -242,7 +242,11 @@ export default function WhatsappPage() {
                   key={c.id}
                   onClick={() => {
                     setSelectedId(c.id)
-                    // Mark as read locally
+                    clearChatUnread(c.id)
+                    // Tell the notifier this chat is now active
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    ;(window as any).__waSetSelectedChat?.(c.id)
+                    // Mark as read in local chat list
                     setChats(prev => {
                       const updated = prev.map(x => x.id === c.id ? { ...x, unread: 0 } : x)
                       const total = updated.reduce((s, x) => s + (x.unread || 0), 0)
@@ -268,11 +272,16 @@ export default function WhatsappPage() {
                     </div>
                     <p className="text-[11px] text-slate-500 truncate">{c.lastMsg}</p>
                   </div>
-                  {c.unread > 0 && (
-                    <span className="w-4 h-4 rounded-full bg-green-500 text-white text-[10px] flex items-center justify-center font-bold shrink-0">
-                      {c.unread > 9 ? '9+' : c.unread}
-                    </span>
-                  )}
+                  {(() => {
+                    const count = localUnread[c.id] ?? c.unread
+                    if (count <= 0) return null
+                    const label = count > 4 ? '4+' : String(count)
+                    return (
+                      <span className="min-w-[18px] h-[18px] rounded-full bg-green-500 text-white text-[10px] flex items-center justify-center font-bold shrink-0 px-1">
+                        {label}
+                      </span>
+                    )
+                  })()}
                 </button>
               ))
             )}

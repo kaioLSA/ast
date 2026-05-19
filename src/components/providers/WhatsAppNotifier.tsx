@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import { usePathname } from 'next/navigation'
 import { useWhatsAppStore } from '@/store/whatsapp.store'
+import { useNotificationsStore } from '@/store/notifications.store'
 
 type Chat = {
   id: string
@@ -61,10 +62,10 @@ function setFaviconDot(hasDot: boolean) {
 
 // ── Browser popup notification ────────────────────────────────────────────────
 
-function fireNotification(senderName: string) {
+function fireBrowserNotification(senderName: string) {
   if (typeof Notification === 'undefined') return
   if (Notification.permission !== 'granted') return
-  new Notification('💬 Nova mensagem no WhatsApp', {
+  new Notification('💬 WhatsApp — Nova mensagem', {
     body: senderName,
     icon: '/st.png',
     tag: `wa-${senderName}`,
@@ -75,20 +76,31 @@ function fireNotification(senderName: string) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function WhatsAppNotifier() {
-  const { setTotalUnread, pendingCount, incrementPending, clearPending } = useWhatsAppStore()
+  const {
+    setTotalUnread,
+    pendingCount,
+    incrementPending,
+    clearPending,
+    incrementChatUnread,
+  } = useWhatsAppStore()
+
+  const { addNotification } = useNotificationsStore()
+
   const pathname = usePathname()
   const pathnameRef = useRef(pathname)
+  // Track which chatId is currently open (passed via URL hash or store — we use a simple ref)
+  const selectedChatRef = useRef<string | null>(null)
+
   const prevTimestamps = useRef<Record<string, number>>({})
   const initialized = useRef(false)
 
-  // Keep pathname ref fresh without restarting the poll interval
+  // Keep pathname ref fresh
   useEffect(() => { pathnameRef.current = pathname }, [pathname])
 
-  // Clear pending badge when user is on the WhatsApp page
+  // Clear pending badge & favicon when user enters WhatsApp page
   useEffect(() => {
     if (pathname.startsWith('/whatsapp')) {
       clearPending()
-      setFaviconDot(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
@@ -105,6 +117,18 @@ export function WhatsAppNotifier() {
     }
   }, [])
 
+  // Expose setter so WhatsApp page can tell us the selected chat
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).__waSetSelectedChat = (id: string | null) => {
+      selectedChatRef.current = id
+    }
+    return () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (window as any).__waSetSelectedChat
+    }
+  }, [])
+
   // Poll chats every 15 s
   useEffect(() => {
     const poll = async () => {
@@ -114,30 +138,43 @@ export function WhatsAppNotifier() {
         const chats: Chat[] = await res.json()
         if (!Array.isArray(chats)) return
 
-        // Keep total unread from API (may be 0 if Evolution doesn't support it)
         const total = chats.reduce((s, c) => s + (c.unread || 0), 0)
         setTotalUnread(total)
-
-        const onWAPage = pathnameRef.current.startsWith('/whatsapp')
 
         if (initialized.current) {
           for (const chat of chats) {
             const prev = prevTimestamps.current[chat.id]
             const isNewer = prev !== undefined && chat.timestamp > prev
-            // Only count as new if the last message came FROM the other person
             const isIncoming = !chat.lastFromMe
+            const isActiveChat = selectedChatRef.current === chat.id
 
             if (isNewer && isIncoming) {
+              // Always increment sidebar badge and per-chat unread
               incrementPending()
-              // Popup notification only when NOT on the WhatsApp page
-              if (!onWAPage) {
-                fireNotification(chat.name)
+              if (!isActiveChat) {
+                incrementChatUnread(chat.id)
+              }
+
+              // In-app notification (topbar bell) — always show
+              addNotification({
+                id: `wa-${chat.id}-${Date.now()}`,
+                type: 'info',
+                title: '💬 ' + chat.name,
+                description: 'Enviou uma mensagem no WhatsApp',
+                read: false,
+                createdAt: new Date().toISOString(),
+                action: { label: 'Ver conversa', href: '/whatsapp' },
+              })
+
+              // Browser popup — show even on WA page, only skip if chat is open
+              if (!isActiveChat) {
+                fireBrowserNotification(chat.name)
               }
             }
+
             prevTimestamps.current[chat.id] = chat.timestamp
           }
         } else {
-          // First load — snapshot without notifying
           for (const chat of chats) {
             prevTimestamps.current[chat.id] = chat.timestamp
           }
@@ -152,7 +189,7 @@ export function WhatsAppNotifier() {
     const id = setInterval(poll, 15_000)
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setTotalUnread, incrementPending])
+  }, [setTotalUnread, incrementPending, incrementChatUnread, addNotification])
 
   return null
 }
