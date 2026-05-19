@@ -12,7 +12,10 @@ type EvoChat = {
   updatedAt?: string
   unreadMessages?: number
   lastMessage?: {
-    key?: { fromMe?: boolean }
+    key?: {
+      fromMe?: boolean
+      remoteJidAlt?: string   // real phone JID for @lid contacts
+    }
     pushName?: string | null
     messageType?: string
     message?: {
@@ -25,27 +28,21 @@ type EvoChat = {
   }
 }
 
-type EvoMsgRecord = {
-  pushName?: string | null
-  key?: { fromMe?: boolean }
-}
-
-/** Fetch the pushName from the most recent received message for a given JID */
-async function fetchReceivedPushName(jid: string): Promise<string | null> {
-  try {
-    const raw = await evoFetch.post(`/chat/findMessages/${EVO_INSTANCE}`, {
-      where: { key: { remoteJid: jid, fromMe: false } },
-      limit: 1,
-    }) as { messages?: { records?: EvoMsgRecord[] } } | EvoMsgRecord[]
-
-    const records: EvoMsgRecord[] = Array.isArray(raw)
-      ? raw
-      : ((raw as { messages?: { records?: EvoMsgRecord[] } }).messages?.records ?? [])
-
-    return records[0]?.pushName ?? null
-  } catch {
-    return null
+/** Format a raw phone number string to Brazilian (XX) XXXXX-XXXX */
+function formatPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  // Strip Brazilian country code 55 if present
+  const local = digits.startsWith('55') && digits.length > 11 ? digits.slice(2) : digits
+  if (local.length === 11) {
+    // Mobile: (XX) XXXXX-XXXX
+    return `(${local.slice(0, 2)}) ${local.slice(2, 7)}-${local.slice(7)}`
   }
+  if (local.length === 10) {
+    // Landline: (XX) XXXX-XXXX
+    return `(${local.slice(0, 2)}) ${local.slice(2, 6)}-${local.slice(6)}`
+  }
+  // International or unknown — return raw digits
+  return digits || raw
 }
 
 export async function GET() {
@@ -56,28 +53,29 @@ export async function GET() {
     const rawChats = await evoFetch.post(`/chat/findChats/${EVO_INSTANCE}`, {})
     const chats: EvoChat[] = Array.isArray(rawChats) ? rawChats : []
 
-    // First pass: build mapped list and collect JIDs that still have no name
-    type MappedChat = {
-      id: string; name: string; lastMsg: string
-      timestamp: number; unread: number; isGroup: boolean; lastFromMe: boolean
-      needsName: boolean
-    }
-
-    const firstPass: MappedChat[] = chats
+    const mapped = chats
       .filter((c) => c.remoteJid)
       .map((c) => {
         const jid = c.remoteJid!
         const isGroup = jid.endsWith('@g.us')
-        // @lid contacts: show number only as last resort (it's an internal WA id, not a phone)
-        const number = jid.split('@')[0]
+        const isLid = jid.endsWith('@lid')
+
+        // For @lid contacts, the real phone number is in lastMessage.key.remoteJidAlt
+        const remoteJidAlt = c.lastMessage?.key?.remoteJidAlt ?? ''
+        const phoneRaw = isLid
+          ? (remoteJidAlt.split('@')[0] || jid.split('@')[0])
+          : jid.split('@')[0]
+        const phoneFormatted = formatPhone(phoneRaw)
 
         const lm = c.lastMessage
         const lastMsgFromMe = lm?.key?.fromMe ?? true
+        // Only use lastMessage.pushName when the sender is the contact (not us)
         const lastSenderName = lastMsgFromMe ? null : (lm?.pushName ?? null)
 
-        const rawName = isGroup
-          ? (c.name || c.subject || c.pushName || lastSenderName || null)
-          : (c.pushName || lastSenderName || null)
+        // Name resolution: saved/cached WA name → last received sender name → formatted phone
+        const name = isGroup
+          ? (c.name || c.subject || c.pushName || lastSenderName || phoneFormatted)
+          : (c.pushName || lastSenderName || phoneFormatted)
 
         let lastText = '...'
         if (lm?.messageType === 'conversation' || lm?.messageType === 'extendedTextMessage') {
@@ -97,45 +95,8 @@ export async function GET() {
         const ts = c.updatedAt ? new Date(c.updatedAt).getTime() / 1000 : 0
         const lastFromMe = lm?.key?.fromMe ?? true
 
-        return {
-          id: jid,
-          name: rawName ?? number,
-          lastMsg: lastText,
-          timestamp: ts,
-          unread: c.unreadMessages ?? 0,
-          isGroup,
-          lastFromMe,
-          needsName: !rawName && !isGroup,
-        }
+        return { id: jid, name, lastMsg: lastText, timestamp: ts, unread: c.unreadMessages ?? 0, isGroup, lastFromMe }
       })
-
-    // Second pass: for contacts still missing a name, fetch their most recent
-    // received message in parallel (up to 20 contacts to avoid too many calls)
-    const nameless = firstPass.filter(c => c.needsName).slice(0, 20)
-
-    if (nameless.length > 0) {
-      const resolved = await Promise.all(
-        nameless.map(async (c) => ({
-          id: c.id,
-          name: await fetchReceivedPushName(c.id),
-        }))
-      )
-
-      const nameMap: Record<string, string> = {}
-      for (const r of resolved) {
-        if (r.name) nameMap[r.id] = r.name
-      }
-
-      for (const c of firstPass) {
-        if (c.needsName && nameMap[c.id]) {
-          c.name = nameMap[c.id]
-        }
-      }
-    }
-
-    // Strip internal field and sort
-    const mapped = firstPass
-      .map(({ needsName: _, ...rest }) => rest)
       .sort((a, b) => b.timestamp - a.timestamp)
 
     return NextResponse.json(mapped)
