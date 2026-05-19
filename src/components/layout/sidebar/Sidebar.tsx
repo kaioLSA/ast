@@ -13,6 +13,7 @@ import { useSidebar } from '@/hooks/useSidebar'
 import { useAuthContext } from '@/context/auth.context'
 import { useAuthStore } from '@/store/auth.store'
 import { routes } from '@/config/routes'
+import { useWhatsAppStore } from '@/store/whatsapp.store'
 
 const navItems = [
   { label: 'Dashboard', href: routes.dashboard, icon: LayoutDashboard, group: 'main' },
@@ -33,6 +34,8 @@ export function Sidebar() {
   const { isCollapsed, toggle } = useSidebar()
   const { logout } = useAuthContext()
   const { user } = useAuthStore()
+  const { totalUnread } = useWhatsAppStore()
+  const waBadge = totalUnread > 4 ? '4+' : totalUnread > 0 ? String(totalUnread) : null
 
   return (
     <aside
@@ -57,6 +60,8 @@ export function Sidebar() {
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-0.5">
         {navItems.map(({ label, href, icon: Icon }) => {
           const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href + '/'))
+          const isWA = href === routes.whatsapp
+          const badge = isWA ? waBadge : null
           return (
             <Link
               key={href}
@@ -70,8 +75,26 @@ export function Sidebar() {
                 isCollapsed && 'justify-center px-0 w-10 mx-auto',
               )}
             >
-              <Icon className={cn('w-[18px] h-[18px] shrink-0', isActive ? 'text-blue-400' : 'text-slate-500 group-hover:text-slate-300')} />
-              {!isCollapsed && <span className="truncate">{label}</span>}
+              {/* Icon — with dot badge when collapsed */}
+              <span className="relative shrink-0">
+                <Icon className={cn('w-[18px] h-[18px]', isActive ? 'text-blue-400' : 'text-slate-500 group-hover:text-slate-300')} />
+                {badge && isCollapsed && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] rounded-full bg-green-500 text-white text-[9px] font-bold flex items-center justify-center px-0.5 leading-none">
+                    {badge}
+                  </span>
+                )}
+              </span>
+              {/* Label + badge when expanded */}
+              {!isCollapsed && (
+                <>
+                  <span className="truncate flex-1">{label}</span>
+                  {badge && (
+                    <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-green-500 text-white text-[10px] font-bold flex items-center justify-center px-1 leading-none shrink-0">
+                      {badge}
+                    </span>
+                  )}
+                </>
+              )}
             </Link>
           )
         })}

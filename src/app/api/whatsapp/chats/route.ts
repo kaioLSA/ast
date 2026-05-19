@@ -8,6 +8,7 @@ type EvoChat = {
   remoteJid?: string
   pushName?: string | null
   updatedAt?: string
+  unreadMessages?: number
   lastMessage?: {
     key?: { fromMe?: boolean }
     pushName?: string
@@ -56,7 +57,7 @@ export async function GET() {
 
         const ts = c.updatedAt ? new Date(c.updatedAt).getTime() / 1000 : 0
 
-        return { id: jid, name, lastMsg: lastText, timestamp: ts, unread: 0, isGroup }
+        return { id: jid, name, lastMsg: lastText, timestamp: ts, unread: c.unreadMessages ?? 0, isGroup }
       })
       .sort((a: { timestamp: number }, b: { timestamp: number }) => b.timestamp - a.timestamp)
 

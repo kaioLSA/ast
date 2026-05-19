@@ -5,6 +5,7 @@ import { usePageTitle } from '@/hooks/usePageTitle'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import { Send, Search, RefreshCw, Users, MessageCircle, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
+import { useWhatsAppStore } from '@/store/whatsapp.store'
 
 type Chat = {
   id: string
@@ -55,6 +56,7 @@ function chatGradient(id: string) {
 
 export default function WhatsappPage() {
   usePageTitle('WhatsApp')
+  const { setTotalUnread } = useWhatsAppStore()
 
   const [chats, setChats] = useState<Chat[]>([])
   const [chatsLoading, setChatsLoading] = useState(true)
@@ -79,6 +81,9 @@ export default function WhatsappPage() {
       if (Array.isArray(data)) {
         setChats(data)
         setChatsError('')
+        // Sync unread count into global store
+        const total = data.reduce((s: number, c: Chat) => s + (c.unread || 0), 0)
+        setTotalUnread(total)
       } else {
         setChatsError(data.error ?? 'Erro ao carregar conversas')
       }
@@ -223,7 +228,16 @@ export default function WhatsappPage() {
               filtered.map(c => (
                 <button
                   key={c.id}
-                  onClick={() => setSelectedId(c.id)}
+                  onClick={() => {
+                    setSelectedId(c.id)
+                    // Mark as read locally
+                    setChats(prev => {
+                      const updated = prev.map(x => x.id === c.id ? { ...x, unread: 0 } : x)
+                      const total = updated.reduce((s, x) => s + (x.unread || 0), 0)
+                      setTotalUnread(total)
+                      return updated
+                    })
+                  }}
                   className={cn(
                     'w-full flex items-center gap-3 px-4 py-3 text-left border-b border-white/5 transition-colors',
                     selectedId === c.id ? 'bg-blue-500/10 border-l-2 border-l-blue-500' : 'hover:bg-white/5',

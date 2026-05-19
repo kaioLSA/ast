@@ -1,5 +1,6 @@
 import { Sidebar } from '@/components/layout/sidebar/Sidebar'
 import { Topbar } from '@/components/layout/topbar/Topbar'
+import { WhatsAppNotifier } from '@/components/providers/WhatsAppNotifier'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,6 +10,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Topbar />
         <main className="flex-1 overflow-y-auto p-6 bg-[#04070f]">{children}</main>
       </div>
+      {/* Global WhatsApp poller — runs on all pages */}
+      <WhatsAppNotifier />
     </div>
   )
 }
