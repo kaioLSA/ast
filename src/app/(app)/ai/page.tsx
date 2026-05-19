@@ -4,13 +4,11 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePageTitle } from '@/hooks/usePageTitle'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import {
-  Sparkles, Send, Bot, User, Zap,
+  Sparkles, Send, Bot, User,
   Users, CalendarDays, UserCheck, Search,
-  RefreshCw, Plus, Pencil, Trash2, MessageSquare, Loader2,
+  RefreshCw, Plus, Pencil, Trash2, MessageSquare, Loader2, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
-
-// ── Types ──────────────────────────────────────────────────────────────────────
 
 type Role = 'user' | 'assistant'
 
@@ -30,25 +28,23 @@ interface Conversation {
   updated_at: string
 }
 
-// ── Constants ──────────────────────────────────────────────────────────────────
-
 const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
-  create_lead:    { label: 'Criando lead',       icon: '👤' },
-  update_lead:    { label: 'Atualizando lead',   icon: '✏️' },
-  list_leads:     { label: 'Buscando leads',     icon: '🔍' },
-  get_lead:       { label: 'Buscando lead',      icon: '🔍' },
-  create_client:  { label: 'Criando cliente',    icon: '🏢' },
-  list_clients:   { label: 'Buscando clientes',  icon: '🔍' },
-  create_event:   { label: 'Agendando evento',   icon: '📅' },
-  list_events:    { label: 'Consultando agenda', icon: '📅' },
-  delete_event:   { label: 'Removendo evento',   icon: '🗑️' },
+  create_lead:    { label: 'Criando lead',        icon: '👤' },
+  update_lead:    { label: 'Atualizando lead',    icon: '✏️' },
+  list_leads:     { label: 'Buscando leads',      icon: '🔍' },
+  get_lead:       { label: 'Buscando lead',       icon: '🔍' },
+  create_client:  { label: 'Criando cliente',     icon: '🏢' },
+  list_clients:   { label: 'Buscando clientes',   icon: '🔍' },
+  create_event:   { label: 'Agendando evento',    icon: '📅' },
+  list_events:    { label: 'Consultando agenda',  icon: '📅' },
+  delete_event:   { label: 'Removendo evento',    icon: '🗑️' },
 }
 
 const SUGGESTIONS = [
-  { label: 'Criar um lead',       icon: Users },
-  { label: 'Ver meus leads',      icon: Search },
-  { label: 'Agendar uma reunião', icon: CalendarDays },
-  { label: 'Ver clientes',        icon: UserCheck },
+  { label: 'Criar um lead',        icon: Users,       desc: 'Adicionar novo contato' },
+  { label: 'Ver meus leads',       icon: Search,      desc: 'Listar todos os leads' },
+  { label: 'Agendar uma reunião',  icon: CalendarDays, desc: 'Criar evento na agenda' },
+  { label: 'Ver clientes',         icon: UserCheck,   desc: 'Consultar clientes ativos' },
 ]
 
 function now() {
@@ -76,42 +72,28 @@ function parseStream(text: string): { tools: string[]; content: string } {
   return { tools: [], content: text }
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
-
 export default function AIPage() {
   usePageTitle('IA')
 
-  // Conversations
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [convsLoading, setConvsLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-
-  // Rename state
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
-
-  // Messages
   const [messages, setMessages] = useState<Message[]>([])
   const [msgsLoading, setMsgsLoading] = useState(false)
-
-  // Chat input / streaming
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [activeTools, setActiveTools] = useState<string[]>([])
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
 
-  // ── Warm-up ──────────────────────────────────────────────────────────────────
-
   useEffect(() => {
-    fetch('/api/ai/warmup').catch(() => { /* silently ignore */ })
+    fetch('/api/ai/warmup').catch(() => {})
   }, [])
-
-  // ── Load conversations ────────────────────────────────────────────────────────
 
   const loadConversations = useCallback(async () => {
     setConvsLoading(true)
@@ -121,14 +103,10 @@ export default function AIPage() {
         const data = await res.json()
         setConversations(Array.isArray(data) ? data : [])
       }
-    } catch { /* ignore */ } finally {
-      setConvsLoading(false)
-    }
+    } catch { /* ignore */ } finally { setConvsLoading(false) }
   }, [])
 
   useEffect(() => { loadConversations() }, [loadConversations])
-
-  // ── Load messages when conversation selected ──────────────────────────────────
 
   const loadMessages = useCallback(async (convId: string) => {
     setMsgsLoading(true)
@@ -139,16 +117,12 @@ export default function AIPage() {
         const data = await res.json()
         if (Array.isArray(data)) {
           setMessages(data.map((m: { id: string; role: Role; content: string; created_at: string }) => ({
-            id: m.id,
-            role: m.role,
-            text: m.content,
+            id: m.id, role: m.role, text: m.content,
             time: new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
           })))
         }
       }
-    } catch { /* ignore */ } finally {
-      setMsgsLoading(false)
-    }
+    } catch { /* ignore */ } finally { setMsgsLoading(false) }
   }, [])
 
   useEffect(() => {
@@ -156,13 +130,7 @@ export default function AIPage() {
     else setMessages([])
   }, [selectedId, loadMessages])
 
-  // ── Auto-scroll ───────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, activeTools])
-
-  // ── Auto-grow textarea ────────────────────────────────────────────────────────
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, activeTools])
 
   useEffect(() => {
     const ta = textareaRef.current
@@ -171,13 +139,9 @@ export default function AIPage() {
     ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
   }, [input])
 
-  // ── Focus rename input when rename starts ─────────────────────────────────────
-
   useEffect(() => {
     if (renamingId) setTimeout(() => renameInputRef.current?.focus(), 50)
   }, [renamingId])
-
-  // ── Create conversation ───────────────────────────────────────────────────────
 
   const createConversation = useCallback(async (): Promise<string | null> => {
     try {
@@ -187,24 +151,19 @@ export default function AIPage() {
       setConversations(prev => [conv, ...prev])
       setSelectedId(conv.id)
       setMessages([])
+      setTimeout(() => textareaRef.current?.focus(), 100)
       return conv.id
-    } catch {
-      return null
-    }
+    } catch { return null }
   }, [])
-
-  // ── Delete conversation ───────────────────────────────────────────────────────
 
   const deleteConversation = useCallback(async (id: string) => {
     await fetch(`/api/ai/conversations/${id}`, { method: 'DELETE' })
-    setConversations(prev => prev.filter(c => c.id !== id))
-    if (selectedId === id) {
-      const remaining = conversations.filter(c => c.id !== id)
-      setSelectedId(remaining[0]?.id ?? null)
-    }
-  }, [selectedId, conversations])
-
-  // ── Rename conversation ───────────────────────────────────────────────────────
+    setConversations(prev => {
+      const next = prev.filter(c => c.id !== id)
+      if (selectedId === id) setSelectedId(next[0]?.id ?? null)
+      return next
+    })
+  }, [selectedId])
 
   const commitRename = useCallback(async () => {
     if (!renamingId || !renameValue.trim()) { setRenamingId(null); return }
@@ -218,115 +177,92 @@ export default function AIPage() {
     })
   }, [renamingId, renameValue])
 
-  // ── Send message ──────────────────────────────────────────────────────────────
+  const sendMessage = useCallback(async (text?: string) => {
+    const msg = (text ?? input).trim()
+    if (!msg || streaming) return
 
-  const sendMessage = useCallback(
-    async (text?: string) => {
-      const msg = (text ?? input).trim()
-      if (!msg || streaming) return
+    let convId = selectedId
+    if (!convId) {
+      convId = await createConversation()
+      if (!convId) return
+    }
 
-      // Ensure we have a conversation
-      let convId = selectedId
-      if (!convId) {
-        convId = await createConversation()
-        if (!convId) return
+    const userMsg: Message = { id: Date.now().toString(), role: 'user', text: msg, time: now() }
+    setMessages(prev => [...prev, userMsg])
+    setInput('')
+    setStreaming(true)
+    setActiveTools([])
+
+    const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.text }))
+    const aiId = (Date.now() + 1).toString()
+    setMessages(prev => [...prev, { id: aiId, role: 'assistant', text: '', time: now(), pending: true }])
+
+    try {
+      const abort = new AbortController()
+      abortRef.current = abort
+
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: history, conversationId: convId }),
+        signal: abort.signal,
+      })
+
+      if (!res.ok || !res.body) {
+        const err = await res.text().catch(() => 'Erro desconhecido')
+        setMessages(prev => prev.map(m => m.id === aiId ? { ...m, text: `Erro: ${err}`, pending: false } : m))
+        return
       }
 
-      const userMsg: Message = { id: Date.now().toString(), role: 'user', text: msg, time: now() }
-      setMessages(prev => [...prev, userMsg])
-      setInput('')
-      setStreaming(true)
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let raw = ''
+      let parsedOnce = false
+      let tools: string[] = []
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        raw += decoder.decode(value, { stream: true })
+        if (!parsedOnce && raw.includes('\n')) {
+          const parsed = parseStream(raw)
+          tools = parsed.tools
+          parsedOnce = true
+          if (tools.length) setActiveTools(tools)
+          setMessages(prev => prev.map(m => m.id === aiId ? { ...m, text: parsed.content, tools, pending: true } : m))
+        } else if (parsedOnce) {
+          setMessages(prev => prev.map(m => m.id === aiId ? { ...m, text: parseStream(raw).content } : m))
+        } else {
+          setMessages(prev => prev.map(m => m.id === aiId ? { ...m, text: raw } : m))
+        }
+      }
+
+      const finalParsed = parseStream(raw)
+      setMessages(prev => prev.map(m => m.id === aiId ? { ...m, text: finalParsed.content, tools: finalParsed.tools, pending: false } : m))
+
+      setTimeout(async () => {
+        try {
+          const r = await fetch('/api/ai/conversations')
+          if (r.ok) { const d = await r.json(); if (Array.isArray(d)) setConversations(d) }
+        } catch { /* ignore */ }
+      }, 1000)
+
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        setMessages(prev => prev.map(m => m.id === aiId ? { ...m, text: 'Erro ao conectar com o assistente.', pending: false } : m))
+      }
+    } finally {
+      setStreaming(false)
       setActiveTools([])
-
-      // Build history for API — all previous messages + new user message
-      const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.text }))
-
-      const aiId = (Date.now() + 1).toString()
-      const aiMsg: Message = { id: aiId, role: 'assistant', text: '', time: now(), pending: true }
-      setMessages(prev => [...prev, aiMsg])
-
-      try {
-        const abort = new AbortController()
-        abortRef.current = abort
-
-        const res = await fetch('/api/ai/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: history, conversationId: convId }),
-          signal: abort.signal,
-        })
-
-        if (!res.ok || !res.body) {
-          const err = await res.text().catch(() => 'Erro desconhecido')
-          setMessages(prev => prev.map(m => m.id === aiId ? { ...m, text: `Erro: ${err}`, pending: false } : m))
-          return
-        }
-
-        const reader = res.body.getReader()
-        const decoder = new TextDecoder()
-        let raw = ''
-        let parsedOnce = false
-        let tools: string[] = []
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          raw += decoder.decode(value, { stream: true })
-
-          if (!parsedOnce && raw.includes('\n')) {
-            const parsed = parseStream(raw)
-            tools = parsed.tools
-            parsedOnce = true
-            if (tools.length) setActiveTools(tools)
-            setMessages(prev => prev.map(m =>
-              m.id === aiId ? { ...m, text: parsed.content, tools, pending: true } : m,
-            ))
-          } else if (parsedOnce) {
-            const content = parseStream(raw).content
-            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, text: content } : m))
-          } else {
-            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, text: raw } : m))
-          }
-        }
-
-        const finalParsed = parseStream(raw)
-        setMessages(prev => prev.map(m =>
-          m.id === aiId ? { ...m, text: finalParsed.content, tools: finalParsed.tools, pending: false } : m,
-        ))
-
-        // Update conversation title in sidebar (might have changed)
-        setTimeout(async () => {
-          try {
-            const r = await fetch('/api/ai/conversations')
-            if (r.ok) {
-              const data = await r.json()
-              if (Array.isArray(data)) setConversations(data)
-            }
-          } catch { /* ignore */ }
-        }, 1000)
-
-      } catch (err: unknown) {
-        if (err instanceof Error && err.name !== 'AbortError') {
-          setMessages(prev => prev.map(m =>
-            m.id === aiId ? { ...m, text: 'Erro ao conectar com o assistente.', pending: false } : m,
-          ))
-        }
-      } finally {
-        setStreaming(false)
-        setActiveTools([])
-        abortRef.current = null
-      }
-    },
-    [input, messages, streaming, selectedId, createConversation],
-  )
+      abortRef.current = null
+    }
+  }, [input, messages, streaming, selectedId, createConversation])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
   }
 
   const selectedConv = conversations.find(c => c.id === selectedId)
-
-  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
@@ -337,33 +273,40 @@ export default function AIPage() {
       />
 
       <div
-        className="rounded-2xl border border-white/10 bg-white/3 overflow-hidden flex"
+        className="rounded-2xl border border-white/10 overflow-hidden flex bg-[#070d1a]"
         style={{ height: 'calc(100vh - 220px)', minHeight: 520 }}
       >
-        {/* ── Sidebar ── */}
-        <div className="w-72 shrink-0 border-r border-white/10 flex flex-col">
-          {/* New conversation button */}
-          <div className="p-3 border-b border-white/10">
+        {/* ── Sidebar ─────────────────────────────────────────────────────── */}
+        <div className="w-64 shrink-0 border-r border-white/8 flex flex-col bg-[#060c18]">
+
+          {/* Sidebar header */}
+          <div className="px-3 pt-4 pb-3 border-b border-white/8">
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center">
+                <Sparkles className="w-3 h-3 text-white" />
+              </div>
+              <span className="text-xs font-semibold text-slate-300">Conversas</span>
+            </div>
             <button
-              onClick={() => createConversation().then(() => setTimeout(() => inputRef.current?.focus(), 100))}
-              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors"
+              onClick={() => createConversation()}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white text-xs font-semibold transition-all shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_20px_rgba(99,102,241,0.35)]"
             >
-              <Plus className="w-4 h-4 shrink-0" />
+              <Plus className="w-3.5 h-3.5" />
               Nova conversa
             </button>
           </div>
 
-          {/* Conversation list */}
-          <div className="flex-1 overflow-y-auto">
+          {/* List */}
+          <div className="flex-1 overflow-y-auto py-1">
             {convsLoading ? (
-              <div className="flex flex-col items-center justify-center h-32 gap-2 text-slate-500">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <p className="text-xs">Carregando...</p>
+              <div className="flex items-center justify-center h-24 gap-2 text-slate-600">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-xs">Carregando...</span>
               </div>
             ) : conversations.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-32 gap-2 text-slate-500 px-4 text-center">
-                <MessageSquare className="w-8 h-8 text-slate-600" />
-                <p className="text-xs">Nenhuma conversa ainda</p>
+              <div className="flex flex-col items-center justify-center h-32 gap-2 px-4 text-center">
+                <MessageSquare className="w-7 h-7 text-slate-700" />
+                <p className="text-xs text-slate-600">Nenhuma conversa ainda</p>
               </div>
             ) : (
               conversations.map(conv => (
@@ -387,141 +330,123 @@ export default function AIPage() {
 
           {/* Footer */}
           {!convsLoading && conversations.length > 0 && (
-            <div className="px-4 py-2 border-t border-white/10 text-[11px] text-slate-500">
-              {conversations.length} conversa{conversations.length !== 1 ? 's' : ''}
+            <div className="px-4 py-2.5 border-t border-white/8 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-[10px] text-slate-600">
+                {conversations.length} conversa{conversations.length !== 1 ? 's' : ''}
+              </span>
             </div>
           )}
         </div>
 
-        {/* ── Chat area ── */}
+        {/* ── Chat area ───────────────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Header */}
-          <div className="flex items-center gap-3 px-5 py-4 border-b border-white/10 shrink-0">
-            <div className="w-9 h-9 rounded-xl bg-violet-500/15 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-violet-400" />
+
+          {/* Chat header */}
+          <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/8 shrink-0 bg-[#070d1a]">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500/20 to-violet-600/20 border border-white/10 flex items-center justify-center">
+              <Bot className="w-4 h-4 text-blue-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-white truncate">
+              <p className="text-sm font-semibold text-white truncate leading-none mb-0.5">
                 {selectedConv ? selectedConv.title : 'Assistente IA'}
               </p>
-              <p className="text-xs text-slate-500">Claude Haiku 4.5 · Anthropic · acesso total ao CRM</p>
+              <p className="text-[10px] text-slate-600">Claude Haiku 4.5 · Anthropic</p>
             </div>
-            <span className="flex items-center gap-1.5 text-xs text-green-400 font-medium shrink-0">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-400/10 border border-green-400/20">
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              Online
-            </span>
+              <span className="text-[10px] text-green-400 font-medium">Online</span>
+            </div>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-            {/* No conversation selected — empty state */}
+          {/* Messages area */}
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+
+            {/* Empty — no conversation selected */}
             {!selectedId && (
-              <div className="flex flex-col items-center justify-center h-full gap-6 pb-10">
-                <div className="w-16 h-16 rounded-2xl bg-violet-500/15 flex items-center justify-center">
-                  <Bot className="w-8 h-8 text-violet-400" />
-                </div>
+              <div className="flex flex-col items-center justify-center h-full gap-8">
                 <div className="text-center">
-                  <p className="text-white font-semibold text-lg mb-1">Olá! Como posso ajudar?</p>
-                  <p className="text-slate-500 text-sm max-w-sm">
-                    Posso criar leads, agendar reuniões, consultar clientes e muito mais — direto aqui.
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-violet-600/20 border border-white/10 flex items-center justify-center mx-auto mb-4 shadow-[0_0_40px_rgba(99,102,241,0.15)]">
+                    <Sparkles className="w-7 h-7 text-blue-400" />
+                  </div>
+                  <p className="text-white font-semibold text-lg mb-1.5">Olá! Como posso ajudar?</p>
+                  <p className="text-slate-500 text-sm max-w-xs mx-auto leading-relaxed">
+                    Posso criar leads, agendar reuniões, consultar clientes e muito mais.
                   </p>
                 </div>
-                <div className="grid grid-cols-2 gap-2 max-w-sm w-full">
-                  {SUGGESTIONS.map(s => {
-                    const Icon = s.icon
-                    return (
-                      <button
-                        key={s.label}
-                        onClick={() => sendMessage(s.label)}
-                        className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-300 hover:text-white hover:bg-violet-500/10 hover:border-violet-500/30 transition-all text-left"
-                      >
-                        <Icon className="w-4 h-4 text-violet-400 shrink-0" />
-                        {s.label}
-                      </button>
-                    )
-                  })}
-                </div>
+                <SuggestionGrid onSelect={sendMessage} />
               </div>
             )}
 
             {/* Loading messages */}
             {selectedId && msgsLoading && (
               <div className="flex items-center justify-center h-32">
-                <Loader2 className="w-6 h-6 animate-spin text-slate-500" />
+                <Loader2 className="w-5 h-5 animate-spin text-slate-600" />
               </div>
             )}
 
-            {/* Conversation selected but empty */}
+            {/* New conversation — empty */}
             {selectedId && !msgsLoading && messages.length === 0 && !streaming && (
-              <div className="flex flex-col items-center justify-center h-full gap-4 pb-10">
-                <div className="w-12 h-12 rounded-2xl bg-violet-500/10 flex items-center justify-center">
-                  <Zap className="w-6 h-6 text-violet-400" />
-                </div>
+              <div className="flex flex-col items-center justify-center h-full gap-8">
                 <div className="text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500/15 to-violet-600/15 border border-white/8 flex items-center justify-center mx-auto mb-3">
+                    <Zap className="w-5 h-5 text-blue-400" />
+                  </div>
                   <p className="text-white font-medium mb-1">Nova conversa</p>
-                  <p className="text-slate-500 text-sm">Digite sua mensagem para começar</p>
+                  <p className="text-slate-500 text-sm">O que você precisa hoje?</p>
                 </div>
-                <div className="grid grid-cols-2 gap-2 max-w-sm w-full">
-                  {SUGGESTIONS.map(s => {
-                    const Icon = s.icon
-                    return (
-                      <button
-                        key={s.label}
-                        onClick={() => sendMessage(s.label)}
-                        className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-300 hover:text-white hover:bg-violet-500/10 hover:border-violet-500/30 transition-all text-left"
-                      >
-                        <Icon className="w-4 h-4 text-violet-400 shrink-0" />
-                        {s.label}
-                      </button>
-                    )
-                  })}
-                </div>
+                <SuggestionGrid onSelect={sendMessage} />
               </div>
             )}
 
-            {/* Message list */}
+            {/* Messages */}
             {messages.map(m => (
               <div key={m.id} className={cn('flex gap-3', m.role === 'user' ? 'flex-row-reverse' : 'flex-row')}>
+                {/* Avatar */}
                 <div className={cn(
-                  'w-7 h-7 rounded-full shrink-0 flex items-center justify-center mt-0.5',
+                  'w-7 h-7 rounded-full shrink-0 flex items-center justify-center mt-0.5 shadow-sm',
                   m.role === 'user'
                     ? 'bg-gradient-to-br from-blue-500 to-blue-700'
-                    : 'bg-gradient-to-br from-violet-600 to-purple-800',
+                    : 'bg-gradient-to-br from-slate-700 to-slate-800 border border-white/10',
                 )}>
-                  {m.role === 'user' ? <User className="w-3.5 h-3.5 text-white" /> : <Bot className="w-3.5 h-3.5 text-white" />}
+                  {m.role === 'user'
+                    ? <User className="w-3.5 h-3.5 text-white" />
+                    : <Bot className="w-3.5 h-3.5 text-blue-400" />}
                 </div>
 
-                <div className="max-w-[78%] space-y-1.5">
+                <div className={cn('max-w-[72%] space-y-1.5', m.role === 'user' && 'items-end flex flex-col')}>
+                  {/* Tool badges */}
                   {m.tools && m.tools.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {m.tools.map((t, i) => {
                         const info = TOOL_LABELS[t]
                         return (
-                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-500/10 border border-violet-500/20 text-[10px] text-violet-300 font-medium">
-                            <span>{info?.icon ?? '⚙️'}</span>
-                            {info?.label ?? t}
+                          <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-300 font-medium">
+                            {info?.icon ?? '⚙️'} {info?.label ?? t}
                           </span>
                         )
                       })}
                     </div>
                   )}
+
+                  {/* Bubble */}
                   <div className={cn(
-                    'rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap',
+                    'rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap',
                     m.role === 'user'
-                      ? 'bg-blue-600 text-white rounded-tr-sm'
-                      : 'bg-white/5 text-slate-200 border border-white/10 rounded-tl-sm',
+                      ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-tr-sm shadow-[0_4px_12px_rgba(37,99,235,0.25)]'
+                      : 'bg-white/[0.04] text-slate-200 border border-white/8 rounded-tl-sm',
                   )}>
                     {m.text || (
-                      <span className="flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                      <span className="flex items-center gap-1.5 py-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: '300ms' }} />
                       </span>
                     )}
                     {m.pending && m.text && (
-                      <span className="inline-block w-0.5 h-3.5 bg-violet-400 ml-0.5 animate-pulse rounded-full align-middle" />
+                      <span className="inline-block w-0.5 h-3.5 bg-blue-400 ml-0.5 animate-pulse rounded-full align-middle" />
                     )}
-                    <p className={cn('text-[10px] mt-1.5', m.role === 'user' ? 'text-blue-200/70' : 'text-slate-600')}>
+                    <p className={cn('text-[10px] mt-2 select-none', m.role === 'user' ? 'text-blue-200/60 text-right' : 'text-slate-600')}>
                       {m.time}
                     </p>
                   </div>
@@ -532,17 +457,16 @@ export default function AIPage() {
             {/* Active tool indicator */}
             {streaming && activeTools.length > 0 && (
               <div className="flex gap-3">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-600 to-purple-800 flex items-center justify-center shrink-0">
-                  <RefreshCw className="w-3.5 h-3.5 text-white animate-spin" />
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border border-white/10 flex items-center justify-center shrink-0">
+                  <RefreshCw className="w-3.5 h-3.5 text-blue-400 animate-spin" />
                 </div>
-                <div className="bg-white/5 border border-violet-500/20 rounded-2xl rounded-tl-sm px-4 py-2.5 flex flex-wrap gap-1.5 items-center">
+                <div className="bg-white/[0.04] border border-white/8 rounded-2xl rounded-tl-sm px-4 py-2.5 flex flex-wrap gap-1.5 items-center">
                   {activeTools.map((t, i) => {
                     const info = TOOL_LABELS[t]
                     return (
-                      <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-500/25 text-[11px] text-violet-300 font-medium">
-                        <span>{info?.icon ?? '⚙️'}</span>
-                        {info?.label ?? t}
-                        <span className="ml-0.5 w-1 h-1 rounded-full bg-violet-400 animate-ping" />
+                      <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-300 font-medium">
+                        {info?.icon ?? '⚙️'} {info?.label ?? t}
+                        <span className="ml-0.5 w-1 h-1 rounded-full bg-blue-400 animate-ping" />
                       </span>
                     )
                   })}
@@ -562,9 +486,9 @@ export default function AIPage() {
                   <button
                     key={s.label}
                     onClick={() => sendMessage(s.label)}
-                    className="whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-400 hover:text-white hover:bg-violet-500/10 hover:border-violet-500/30 transition-all shrink-0"
+                    className="whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/4 border border-white/8 text-xs text-slate-500 hover:text-white hover:bg-blue-500/10 hover:border-blue-500/20 transition-all shrink-0"
                   >
-                    <Icon className="w-3 h-3 text-violet-400" />
+                    <Icon className="w-3 h-3 text-blue-500" />
                     {s.label}
                   </button>
                 )
@@ -573,37 +497,28 @@ export default function AIPage() {
           )}
 
           {/* Input */}
-          <div className="px-5 py-4 border-t border-white/10 shrink-0">
+          <div className="px-5 py-4 border-t border-white/8 shrink-0">
             <div className="flex gap-3 items-end">
               <textarea
-                ref={el => {
-                  // assign both refs
-                  (textareaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
-                  (inputRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el
-                }}
+                ref={textareaRef}
                 rows={1}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={selectedId ? 'Peça para criar um lead, agendar reunião, ver clientes... (Enter para enviar)' : 'Comece digitando para criar uma nova conversa...'}
+                placeholder={selectedId ? 'Peça para criar um lead, agendar reunião, ver clientes...' : 'Comece digitando para criar uma nova conversa...'}
                 disabled={streaming}
-                className="flex-1 resize-none px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-violet-500/50 disabled:opacity-50 transition-colors leading-relaxed"
+                className="flex-1 resize-none px-4 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/40 focus:bg-white/[0.06] disabled:opacity-50 transition-all leading-relaxed"
               />
               <button
                 onClick={() => sendMessage()}
                 disabled={!input.trim() || streaming}
-                className="shrink-0 w-10 h-10 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors flex items-center justify-center"
+                className="shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-all flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.2)] hover:shadow-[0_0_20px_rgba(99,102,241,0.4)]"
               >
-                {streaming ? (
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
+                {streaming
+                  ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  : <Send className="w-4 h-4" />}
               </button>
             </div>
-            <p className="text-[10px] text-slate-600 mt-2 text-center">
-              Claude Haiku 4.5 · Anthropic · acesso total ao CRM
-            </p>
           </div>
         </div>
       </div>
@@ -611,7 +526,34 @@ export default function AIPage() {
   )
 }
 
-// ── ConversationItem sub-component ─────────────────────────────────────────────
+// ── Suggestion grid ────────────────────────────────────────────────────────────
+
+function SuggestionGrid({ onSelect }: { onSelect: (text: string) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-2.5 w-full max-w-sm">
+      {SUGGESTIONS.map(s => {
+        const Icon = s.icon
+        return (
+          <button
+            key={s.label}
+            onClick={() => onSelect(s.label)}
+            className="group flex flex-col gap-2 p-4 rounded-2xl bg-white/[0.03] border border-white/8 hover:bg-blue-500/8 hover:border-blue-500/25 transition-all text-left"
+          >
+            <div className="w-8 h-8 rounded-xl bg-white/5 border border-white/8 group-hover:bg-blue-500/15 group-hover:border-blue-500/25 flex items-center justify-center transition-all">
+              <Icon className="w-4 h-4 text-slate-400 group-hover:text-blue-400 transition-colors" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-300 group-hover:text-white transition-colors leading-snug">{s.label}</p>
+              <p className="text-[10px] text-slate-600 mt-0.5">{s.desc}</p>
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── ConversationItem ───────────────────────────────────────────────────────────
 
 interface ConversationItemProps {
   conv: Conversation
@@ -628,27 +570,23 @@ interface ConversationItemProps {
 }
 
 function ConversationItem({
-  conv,
-  isSelected,
-  isRenaming,
-  renameValue,
-  renameInputRef,
-  onSelect,
-  onRenameStart,
-  onRenameChange,
-  onRenameCommit,
-  onRenameCancel,
-  onDelete,
+  conv, isSelected, isRenaming, renameValue, renameInputRef,
+  onSelect, onRenameStart, onRenameChange, onRenameCommit, onRenameCancel, onDelete,
 }: ConversationItemProps) {
   return (
     <div
-      className={cn(
-        'group relative flex items-center gap-2 px-3 py-2.5 border-b border-white/5 cursor-pointer transition-colors',
-        isSelected ? 'bg-violet-500/10 border-l-2 border-l-violet-500' : 'hover:bg-white/5',
-      )}
       onClick={() => { if (!isRenaming) onSelect() }}
+      className={cn(
+        'group relative flex items-center gap-2.5 px-3 py-2.5 mx-2 my-0.5 rounded-xl cursor-pointer transition-all',
+        isSelected
+          ? 'bg-gradient-to-r from-blue-500/15 to-violet-500/10 border border-blue-500/20'
+          : 'hover:bg-white/4 border border-transparent',
+      )}
     >
-      <MessageSquare className={cn('w-3.5 h-3.5 shrink-0', isSelected ? 'text-violet-400' : 'text-slate-500')} />
+      <MessageSquare className={cn(
+        'w-3.5 h-3.5 shrink-0 transition-colors',
+        isSelected ? 'text-blue-400' : 'text-slate-600 group-hover:text-slate-400',
+      )} />
 
       <div className="flex-1 min-w-0">
         {isRenaming ? (
@@ -662,17 +600,18 @@ function ConversationItem({
             }}
             onBlur={onRenameCommit}
             onClick={e => e.stopPropagation()}
-            className="w-full bg-transparent text-xs text-white outline-none border-b border-violet-500/50 pb-0.5"
+            className="w-full bg-transparent text-xs text-white outline-none border-b border-blue-500/50 pb-0.5"
           />
         ) : (
           <>
-            <p className="text-xs font-medium text-white truncate">{conv.title}</p>
-            <p className="text-[10px] text-slate-500">{relativeDate(conv.updated_at)}</p>
+            <p className={cn('text-xs font-medium truncate transition-colors', isSelected ? 'text-white' : 'text-slate-400 group-hover:text-slate-200')}>
+              {conv.title}
+            </p>
+            <p className="text-[10px] text-slate-600 mt-0.5">{relativeDate(conv.updated_at)}</p>
           </>
         )}
       </div>
 
-      {/* Action buttons — visible on hover or when selected */}
       {!isRenaming && (
         <div className={cn(
           'flex items-center gap-0.5 shrink-0 transition-opacity',
@@ -680,15 +619,13 @@ function ConversationItem({
         )}>
           <button
             onClick={e => { e.stopPropagation(); onRenameStart() }}
-            title="Renomear"
-            className="p-1 rounded text-slate-500 hover:text-violet-400 hover:bg-violet-500/10 transition-colors"
+            className="p-1 rounded-lg text-slate-600 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
           >
             <Pencil className="w-3 h-3" />
           </button>
           <button
             onClick={e => { e.stopPropagation(); onDelete() }}
-            title="Excluir"
-            className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            className="p-1 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
           >
             <Trash2 className="w-3 h-3" />
           </button>
