@@ -238,7 +238,137 @@ export async function executeTool(
   }
 }
 
-// ─── Tool definitions (Ollama format) ─────────────────────────────────────────
+// ─── Tool definitions (Anthropic format) ──────────────────────────────────────
+// Anthropic uses { name, description, input_schema } instead of { type, function: { ... } }
+
+export const anthropicTools = [
+  {
+    name: 'list_leads',
+    description: 'Lista leads do CRM com filtros opcionais. Use para buscar, visualizar ou consultar leads existentes.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['new','contacted','qualified','proposal','negotiation','won','lost'], description: 'Filtrar por status' },
+        temperature: { type: 'string', enum: ['hot','warm','cold'], description: 'Filtrar por temperatura' },
+        limit: { type: 'number', description: 'Quantidade máxima (padrão 20)' },
+      },
+    },
+  },
+  {
+    name: 'get_lead',
+    description: 'Busca detalhes completos de um lead específico pelo ID ou nome.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'ID do lead' },
+        name: { type: 'string', description: 'Nome ou parte do nome do lead' },
+      },
+    },
+  },
+  {
+    name: 'create_lead',
+    description: 'Cria um novo lead no CRM.',
+    input_schema: {
+      type: 'object',
+      required: ['name'],
+      properties: {
+        name: { type: 'string', description: 'Nome completo do lead' },
+        phone: { type: 'string', description: 'Telefone/WhatsApp' },
+        email: { type: 'string', description: 'E-mail' },
+        source: { type: 'string', enum: ['meta_ads','google_ads','whatsapp','organic','referral','manual'] },
+        status: { type: 'string', enum: ['new','contacted','qualified','proposal','negotiation','won','lost'] },
+        temperature: { type: 'string', enum: ['hot','warm','cold'] },
+        value: { type: 'number', description: 'Valor estimado em reais' },
+        notes: { type: 'string', description: 'Observações' },
+      },
+    },
+  },
+  {
+    name: 'update_lead',
+    description: 'Atualiza dados de um lead existente pelo ID.',
+    input_schema: {
+      type: 'object',
+      required: ['id'],
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        phone: { type: 'string' },
+        email: { type: 'string' },
+        status: { type: 'string', enum: ['new','contacted','qualified','proposal','negotiation','won','lost'] },
+        temperature: { type: 'string', enum: ['hot','warm','cold'] },
+        value: { type: 'number' },
+        notes: { type: 'string' },
+        source: { type: 'string', enum: ['meta_ads','google_ads','whatsapp','organic','referral','manual'] },
+      },
+    },
+  },
+  {
+    name: 'list_clients',
+    description: 'Lista clientes cadastrados no CRM.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', description: 'Quantidade máxima (padrão 20)' },
+      },
+    },
+  },
+  {
+    name: 'create_client',
+    description: 'Cadastra um novo cliente no CRM.',
+    input_schema: {
+      type: 'object',
+      required: ['name'],
+      properties: {
+        name: { type: 'string' },
+        company_name: { type: 'string' },
+        phone: { type: 'string' },
+        email: { type: 'string' },
+        value: { type: 'number' },
+      },
+    },
+  },
+  {
+    name: 'list_events',
+    description: 'Lista eventos da agenda de um mês específico.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        month: { type: 'number', description: 'Mês (1-12), padrão: mês atual' },
+        year: { type: 'number', description: 'Ano, padrão: ano atual' },
+      },
+    },
+  },
+  {
+    name: 'create_event',
+    description: 'Cria um evento na agenda.',
+    input_schema: {
+      type: 'object',
+      required: ['label','day','month','year','time'],
+      properties: {
+        label: { type: 'string', description: 'Título do evento' },
+        day: { type: 'number' },
+        month: { type: 'number' },
+        year: { type: 'number' },
+        time: { type: 'string', description: 'Horário HH:MM' },
+        color: { type: 'string', enum: ['blue','green','red','yellow','purple','pink'] },
+        description: { type: 'string' },
+      },
+    },
+  },
+  {
+    name: 'delete_event',
+    description: 'Remove um evento da agenda pelo ID.',
+    input_schema: {
+      type: 'object',
+      required: ['id'],
+      properties: {
+        id: { type: 'string' },
+      },
+    },
+  },
+]
+
+// ─── Tool definitions (Ollama format — kept for reference) ────────────────────
 
 export const toolDefinitions = [
   {

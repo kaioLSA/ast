@@ -1,74 +1,53 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthUser } from '@/lib/utils/get-auth-user'
-import { toolDefinitions, executeTool } from '../tools'
+import { anthropicTools, executeTool } from '../tools'
 
-const OLLAMA_URL = process.env.OLLAMA_API_URL ?? 'http://localhost:11434'
-const MODEL_FAST = 'llama3.2:1b'  // fast, no tool calling — used for casual chat
-const MODEL_CRM  = 'llama3.2:3b'  // slower, full tool calling — used for CRM actions
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? ''
+const MODEL = 'claude-3-5-haiku-20241022'
 const MAX_TOOL_ITERATIONS = 6
 
-// Keep model loaded in memory for 10 years (Ollama 0.24 doesn't accept -1 literal)
-const KEEP_ALIVE = '87600h'
+// ── Anthropic message types ────────────────────────────────────────────────────
 
-// Keywords that indicate the user wants to interact with the CRM.
-// When none match, we skip sending the large tool definitions (~750 tokens)
-// and respond 5-10x faster with a plain conversational reply.
-const CRM_KEYWORDS = [
-  'lead', 'leads', 'cliente', 'clientes', 'criar', 'cria', 'crie',
-  'listar', 'lista', 'ver', 'veja', 'mostrar', 'mostre',
-  'agendar', 'agenda', 'evento', 'eventos', 'reunião', 'reuniao',
-  'atualizar', 'atualiza', 'atualize', 'remover', 'remove', 'deletar',
-  'buscar', 'busca', 'pesquisar', 'encontrar', 'cadastrar', 'cadastra',
-  'novo lead', 'nova reunião', 'meus leads', 'meus clientes',
-]
+type TextBlock    = { type: 'text'; text: string }
+type ToolUseBlock = { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
+type ToolResBlock = { type: 'tool_result'; tool_use_id: string; content: string }
 
-function needsCRMTools(messages: Array<{ role: string; content: string }>): boolean {
-  // Check only the last user message
-  const lastUser = [...messages].reverse().find(m => m.role === 'user')
-  if (!lastUser) return false
-  const lower = lastUser.content.toLowerCase()
-  return CRM_KEYWORDS.some(k => lower.includes(k))
+type ContentBlock = TextBlock | ToolUseBlock | ToolResBlock
+
+type AnthropicMessage = {
+  role: 'user' | 'assistant'
+  content: string | ContentBlock[]
 }
 
-type OllamaMessage = {
-  role: 'system' | 'user' | 'assistant' | 'tool'
-  content: string
-  tool_calls?: OllamaToolCall[]
+type AnthropicResponse = {
+  content: ContentBlock[]
+  stop_reason: 'end_turn' | 'tool_use' | string
 }
 
-type OllamaToolCall = {
-  function: {
-    name: string
-    arguments: Record<string, unknown>
-  }
-}
+// ── API call ───────────────────────────────────────────────────────────────────
 
-type OllamaResponse = {
-  message: OllamaMessage
-  done: boolean
-}
-
-async function ollamaChat(messages: OllamaMessage[], withTools: boolean): Promise<OllamaResponse> {
-  const model = withTools ? MODEL_CRM : MODEL_FAST
-  const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+async function claudeChat(system: string, messages: AnthropicMessage[]): Promise<AnthropicResponse> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
     body: JSON.stringify({
-      model,
+      model: MODEL,
+      max_tokens: 1024,
+      system,
       messages,
-      stream: false,
-      ...(withTools ? { tools: toolDefinitions } : {}),
-      keep_alive: KEEP_ALIVE,
-      options: { temperature: 0.3, num_predict: 512 },
+      tools: anthropicTools,
     }),
   })
 
-  if (!res.ok) {
-    throw new Error(`Ollama error ${res.status}: ${await res.text()}`)
-  }
-
-  return res.json() as Promise<OllamaResponse>
+  if (!res.ok) throw new Error(`Claude API error ${res.status}: ${await res.text()}`)
+  return res.json() as Promise<AnthropicResponse>
 }
+
+// ── Streaming helper ───────────────────────────────────────────────────────────
 
 function makeStream(text: string, toolsUsed: string[]): Response {
   const encoder = new TextEncoder()
@@ -82,7 +61,7 @@ function makeStream(text: string, toolsUsed: string[]): Response {
       function pushNext() {
         if (idx >= words.length) { controller.close(); return }
         controller.enqueue(encoder.encode(words[idx++]))
-        setTimeout(pushNext, 12)
+        setTimeout(pushNext, 10)
       }
       pushNext()
     },
@@ -97,9 +76,15 @@ function makeStream(text: string, toolsUsed: string[]): Response {
   })
 }
 
+// ── Route handler ──────────────────────────────────────────────────────────────
+
 export async function POST(request: NextRequest) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  if (!ANTHROPIC_API_KEY) {
+    return NextResponse.json({ error: 'ANTHROPIC_API_KEY não configurada' }, { status: 500 })
+  }
 
   const body = await request.json().catch(() => ({}))
   const { messages } = body as { messages?: Array<{ role: string; content: string }> }
@@ -109,55 +94,69 @@ export async function POST(request: NextRequest) {
   }
 
   const today = new Date()
-  const dateStr = today.toLocaleDateString('pt-BR', {
-    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
-  })
+  const dateStr = today.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
   const timeStr = today.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
-  const systemPrompt: OllamaMessage = {
-    role: 'system',
-    content: `Você é um assistente de vendas e CRM da Startsette. Data: ${dateStr}, ${timeStr}.
-Responda SEMPRE em português brasileiro. Seja direto e amigável.
-Capacidades: criar/listar/atualizar leads, clientes e eventos na agenda.
-Ao executar ações no CRM, use as ferramentas sem pedir confirmação desnecessária.`,
-  }
+  const systemPrompt = `Você é um assistente de vendas e CRM inteligente da Startsette com acesso total ao sistema.
+Data e hora atual: ${dateStr}, ${timeStr}.
 
-  const withTools = needsCRMTools(messages)
-  const conversation: OllamaMessage[] = [systemPrompt, ...(messages as OllamaMessage[])]
+Suas capacidades:
+- Criar, listar, atualizar leads
+- Criar e listar clientes
+- Criar, listar e remover eventos na agenda
+
+Regras:
+- Responda SEMPRE em português brasileiro.
+- Use as ferramentas imediatamente quando o usuário pedir ações no CRM — sem pedir confirmação desnecessária.
+- Se faltar o nome para criar lead/cliente, pergunte apenas o nome e crie em seguida.
+- Se faltar data/hora para criar evento, pergunte só esses dados essenciais.
+- Após executar uma ação, confirme de forma clara e amigável.
+- Você também pode dar conselhos de vendas, estratégias de follow-up e análises de negócios.`
+
+  const conversation: AnthropicMessage[] = messages.map(m => ({
+    role: m.role as 'user' | 'assistant',
+    content: m.content,
+  }))
+
   const toolsUsed: string[] = []
 
   try {
-    if (!withTools) {
-      // ── Fast path: no CRM intent → skip tool definitions, respond quickly ──
-      const data = await ollamaChat(conversation, false)
-      return makeStream(data.message.content?.trim() || 'Olá! Como posso ajudar?', [])
-    }
-
-    // ── CRM path: agentic tool loop ────────────────────────────────────────
     for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-      const data = await ollamaChat(conversation, true)
-      const assistantMsg = data.message
+      const response = await claudeChat(systemPrompt, conversation)
 
-      if (!assistantMsg.tool_calls?.length) {
-        return makeStream(assistantMsg.content?.trim() || 'Pronto!', toolsUsed)
+      const textBlocks = response.content.filter((b): b is TextBlock => b.type === 'text')
+      const toolBlocks = response.content.filter((b): b is ToolUseBlock => b.type === 'tool_use')
+
+      // No tools → final answer
+      if (response.stop_reason !== 'tool_use' || toolBlocks.length === 0) {
+        const finalText = textBlocks.map(b => b.text).join('').trim() || 'Pronto!'
+        return makeStream(finalText, toolsUsed)
       }
 
-      conversation.push(assistantMsg)
+      // Add assistant's response (with tool_use blocks) to conversation
+      conversation.push({ role: 'assistant', content: response.content })
 
-      for (const call of assistantMsg.tool_calls) {
-        const toolName = call.function.name
-        const toolArgs = call.function.arguments ?? {}
-        toolsUsed.push(toolName)
-        const result = await executeTool(toolName, toolArgs, user)
-        conversation.push({ role: 'tool', content: result })
+      // Execute each tool and collect tool_result blocks
+      const toolResultContent: ToolResBlock[] = []
+      for (const tool of toolBlocks) {
+        toolsUsed.push(tool.name)
+        const result = await executeTool(tool.name, tool.input, user)
+        toolResultContent.push({
+          type: 'tool_result',
+          tool_use_id: tool.id,
+          content: result,
+        })
       }
+
+      // Send all tool results back in a single user message
+      conversation.push({ role: 'user', content: toolResultContent })
     }
 
     return new Response('Não consegui completar a operação. Tente novamente.', {
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     })
   } catch (err) {
-    console.error('[AI chat error]', err)
+    console.error('[Claude chat error]', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }

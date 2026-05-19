@@ -227,7 +227,7 @@ export default function AIPage() {
           </div>
           <div>
             <p className="text-sm font-semibold text-white">Assistente IA</p>
-            <p className="text-xs text-slate-500">Llama 3.2 · 3B · acesso total ao CRM</p>
+            <p className="text-xs text-slate-500">Claude 3.5 Haiku · Anthropic · acesso total ao CRM</p>
           </div>
           <span className="ml-auto flex items-center gap-1.5 text-xs text-green-400 font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
@@ -421,7 +421,7 @@ export default function AIPage() {
             </button>
           </div>
           <p className="text-[10px] text-slate-600 mt-2 text-center">
-            Llama 3.2 · 3B · rodando em sua VPS · acesso total ao CRM
+            Claude 3.5 Haiku · Anthropic · acesso total ao CRM
           </p>
         </div>
       </div>
