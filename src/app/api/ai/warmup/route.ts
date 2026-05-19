@@ -21,7 +21,7 @@ export async function GET() {
         model: MODEL,
         messages: [{ role: 'user', content: 'oi' }],
         stream: false,
-        keep_alive: '-1',
+        keep_alive: '87600h',
         options: { num_predict: 1 }, // generate just 1 token — we don't need the reply
       }),
     })

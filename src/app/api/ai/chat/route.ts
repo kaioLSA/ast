@@ -6,8 +6,8 @@ const OLLAMA_URL = process.env.OLLAMA_API_URL ?? 'http://localhost:11434'
 const MODEL = 'llama3.2:3b'
 const MAX_TOOL_ITERATIONS = 6
 
-// Keep model loaded in memory permanently — eliminates the 13-second cold-start
-const KEEP_ALIVE = '-1'
+// Keep model loaded in memory for 10 years (Ollama 0.24 doesn't accept -1 literal)
+const KEEP_ALIVE = '87600h'
 
 type OllamaMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
