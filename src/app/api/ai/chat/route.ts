@@ -3,7 +3,8 @@ import { getAuthUser } from '@/lib/utils/get-auth-user'
 import { toolDefinitions, executeTool } from '../tools'
 
 const OLLAMA_URL = process.env.OLLAMA_API_URL ?? 'http://localhost:11434'
-const MODEL = 'llama3.2:3b'
+const MODEL_FAST = 'llama3.2:1b'  // fast, no tool calling — used for casual chat
+const MODEL_CRM  = 'llama3.2:3b'  // slower, full tool calling — used for CRM actions
 const MAX_TOOL_ITERATIONS = 6
 
 // Keep model loaded in memory for 10 years (Ollama 0.24 doesn't accept -1 literal)
@@ -48,11 +49,12 @@ type OllamaResponse = {
 }
 
 async function ollamaChat(messages: OllamaMessage[], withTools: boolean): Promise<OllamaResponse> {
+  const model = withTools ? MODEL_CRM : MODEL_FAST
   const res = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       messages,
       stream: false,
       ...(withTools ? { tools: toolDefinitions } : {}),
