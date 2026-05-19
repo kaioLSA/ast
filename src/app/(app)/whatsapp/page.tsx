@@ -141,12 +141,19 @@ export default function WhatsappPage() {
     setCtxMenu({ x, y, chat })
   }
 
-  // Close context menu on any click outside
+  // Close context menu on click outside — add listener on next tick so the
+  // click that opened the menu doesn't immediately trigger the close handler
   useEffect(() => {
+    if (!ctxMenu) return
     const close = () => setCtxMenu(null)
-    document.addEventListener('click', close)
-    return () => document.removeEventListener('click', close)
-  }, [])
+    const timer = setTimeout(() => {
+      document.addEventListener('click', close, { once: true })
+    }, 0)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('click', close)
+    }
+  }, [ctxMenu])
 
   // ── Modal helpers ────────────────────────────────────────────────────────
 
