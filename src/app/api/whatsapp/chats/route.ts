@@ -25,13 +25,36 @@ type EvoChat = {
   }
 }
 
+type EvoContact = {
+  remoteJid?: string
+  pushName?: string | null
+  profileName?: string | null
+  name?: string | null
+  verifiedName?: string | null
+}
+
 export async function GET() {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    const raw = await evoFetch.post(`/chat/findChats/${EVO_INSTANCE}`, {})
-    const chats = Array.isArray(raw) ? raw : []
+    // Fetch chats and contacts in parallel
+    const [rawChats, rawContacts] = await Promise.all([
+      evoFetch.post(`/chat/findChats/${EVO_INSTANCE}`, {}),
+      evoFetch.post(`/contact/findContacts/${EVO_INSTANCE}`, {}).catch(() => []),
+    ])
+
+    const chats = Array.isArray(rawChats) ? rawChats : []
+
+    // Build a JID → WhatsApp display name map from contacts endpoint
+    // This gives us pushName even for unsaved contacts
+    const contactMap: Record<string, string> = {}
+    const contacts = Array.isArray(rawContacts) ? rawContacts : []
+    for (const c of contacts as EvoContact[]) {
+      if (!c.remoteJid) continue
+      const displayName = c.pushName || c.profileName || c.verifiedName || c.name
+      if (displayName) contactMap[c.remoteJid] = displayName
+    }
 
     const mapped = chats
       .filter((c: EvoChat) => c.remoteJid)
@@ -42,15 +65,16 @@ export async function GET() {
 
         const lm = c.lastMessage
 
-        // For individuals: lastMessage.pushName is the *sender's* name — only use
-        // it as fallback when the last message was NOT from us (fromMe=false),
-        // otherwise it would show "Você" as the contact name.
+        // For individuals: only use lastMessage.pushName when the last message
+        // was received (fromMe=false), otherwise it returns the user's own name.
         const lastMsgFromMe = lm?.key?.fromMe ?? true
-        const contactNameFallback = lastMsgFromMe ? null : (lm?.pushName ?? null)
+        const lastSenderName = lastMsgFromMe ? null : (lm?.pushName ?? null)
 
+        // Priority: chat.pushName → contacts API name → last received sender name → number
         const name = isGroup
-          ? (c.name || c.subject || c.pushName || number)
-          : (c.pushName || contactNameFallback || number)
+          ? (c.name || c.subject || c.pushName || contactMap[jid] || number)
+          : (c.pushName || contactMap[jid] || lastSenderName || number)
+
         let lastText = '...'
         if (lm?.messageType === 'conversation' || lm?.messageType === 'extendedTextMessage') {
           lastText = lm.message?.conversation || lm.message?.extendedTextMessage?.text || '...'
