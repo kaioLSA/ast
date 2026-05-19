@@ -95,7 +95,15 @@ export async function GET() {
         const ts = c.updatedAt ? new Date(c.updatedAt).getTime() / 1000 : 0
         const lastFromMe = lm?.key?.fromMe ?? true
 
-        return { id: jid, name, lastMsg: lastText, timestamp: ts, unread: c.unreadMessages ?? 0, isGroup, lastFromMe }
+        // participantJid: the @s.whatsapp.net JID used when adding to groups / API calls
+        const participantJid = isGroup ? null
+          : isLid ? `${phoneRaw}@s.whatsapp.net`
+          : jid
+
+        return {
+          id: jid, name, phone: phoneRaw, participantJid,
+          lastMsg: lastText, timestamp: ts, unread: c.unreadMessages ?? 0, isGroup, lastFromMe,
+        }
       })
       .sort((a, b) => b.timestamp - a.timestamp)
 

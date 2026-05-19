@@ -3,13 +3,20 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePageTitle } from '@/hooks/usePageTitle'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
-import { Send, Search, RefreshCw, Users, MessageCircle, Loader2 } from 'lucide-react'
+import {
+  Send, Search, RefreshCw, Users, MessageCircle, Loader2,
+  MoreVertical, X, Check, UserPlus, Briefcase, UsersRound,
+} from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { useWhatsAppStore } from '@/store/whatsapp.store'
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 type Chat = {
   id: string
   name: string
+  phone: string
+  participantJid: string | null
   lastMsg: string
   timestamp: number
   unread: number
@@ -26,12 +33,15 @@ type Msg = {
   senderName?: string | null
 }
 
+type ModalType = 'lead' | 'client' | 'group'
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function timeLabel(ts: number) {
   if (!ts) return ''
   const d = new Date(ts * 1000)
   const now = new Date()
   const diff = now.getTime() - d.getTime()
-  // Slightly in the future (clock skew) → treat as now
   if (diff < 0) return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   const diffDays = Math.floor(diff / 86400000)
   if (diffDays === 0) return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
@@ -46,7 +56,7 @@ function formatMsgTime(ts: number) {
 }
 
 function initials(name: string) {
-  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  return name.split(' ').map(w => w[0]).filter(Boolean).join('').slice(0, 2).toUpperCase()
 }
 
 const GRADIENTS = [
@@ -64,30 +74,202 @@ function chatGradient(id: string) {
   return GRADIENTS[Math.abs(h) % GRADIENTS.length]
 }
 
+/** Returns true if the name looks like a formatted phone (e.g. "(11) 91234-5678") */
+function isPhoneName(name: string) {
+  return /^\(\d{2}\)/.test(name) || /^\d{8,}$/.test(name)
+}
+
+// ── Form field helper ─────────────────────────────────────────────────────────
+
+function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs text-slate-400 mb-1.5 font-medium">
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+const inputCls = 'w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/60 transition-colors'
+const selectCls = `${inputCls} cursor-pointer`
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function WhatsappPage() {
   usePageTitle('WhatsApp')
   const { setTotalUnread, clearPending, localUnread, clearChatUnread } = useWhatsAppStore()
 
-  // Clear sidebar badge when entering WhatsApp page
   useEffect(() => { clearPending() }, [clearPending])
 
+  // ── Chat list state ──
   const [chats, setChats] = useState<Chat[]>([])
   const [chatsLoading, setChatsLoading] = useState(true)
   const [chatsError, setChatsError] = useState('')
 
+  // ── Conversation state ──
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Msg[]>([])
   const [msgsLoading, setMsgsLoading] = useState(false)
-
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<'chats' | 'groups'>('chats')
 
+  // ── Context menu state ──
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; chat: Chat } | null>(null)
+
+  // ── Modal state ──
+  const [activeModal, setActiveModal] = useState<ModalType | null>(null)
+  const [modalChat, setModalChat] = useState<Chat | null>(null)
+  const [form, setForm] = useState<Record<string, string>>({})
+  const [submitting, setSubmitting] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+
   const bottomRef = useRef<HTMLDivElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Load chat list
+  // ── Context menu helpers ──────────────────────────────────────────────────
+
+  const openCtxMenu = (e: React.MouseEvent, chat: Chat) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const x = Math.min(e.clientX, window.innerWidth - 224)
+    const y = Math.min(e.clientY, window.innerHeight - 220)
+    setCtxMenu({ x, y, chat })
+  }
+
+  // Close context menu on any click outside
+  useEffect(() => {
+    const close = () => setCtxMenu(null)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [])
+
+  // ── Modal helpers ────────────────────────────────────────────────────────
+
+  const openModal = (type: ModalType, chat: Chat) => {
+    setCtxMenu(null)
+    setActiveModal(type)
+    setModalChat(chat)
+    setSuccess(false)
+    setSubmitError('')
+
+    const phoneName = isPhoneName(chat.name) ? '' : chat.name
+    const phoneVal = chat.phone || chat.name
+
+    if (type === 'lead') {
+      setForm({
+        name: phoneName,
+        phone: phoneVal,
+        email: '',
+        company: '',
+        status: 'new',
+        temperature: 'warm',
+        value: '0',
+        score: '70',
+        notes: '',
+      })
+    } else if (type === 'client') {
+      setForm({
+        name: phoneName,
+        phone: phoneVal,
+        email: '',
+        company_name: '',
+        status: 'prospect',
+        value: '0',
+        deals: '0',
+        score: '70',
+        since: new Date().toISOString().split('T')[0],
+      })
+    } else if (type === 'group') {
+      setForm({ subject: '' })
+    }
+  }
+
+  const closeModal = () => {
+    setActiveModal(null)
+    setModalChat(null)
+    setSuccess(false)
+    setSubmitError('')
+  }
+
+  const setField = (key: string, value: string) => setForm(f => ({ ...f, [key]: value }))
+
+  // ── Submit handlers ───────────────────────────────────────────────────────
+
+  const handleSubmit = async () => {
+    if (!modalChat || submitting) return
+    setSubmitting(true)
+    setSubmitError('')
+
+    try {
+      if (activeModal === 'lead') {
+        if (!form.name?.trim()) { setSubmitError('Nome é obrigatório'); setSubmitting(false); return }
+        const res = await fetch('/api/leads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: form.name.trim(),
+            phone: form.phone,
+            email: form.email,
+            company: form.company,
+            status: form.status || 'new',
+            source: 'whatsapp',
+            temperature: form.temperature || 'warm',
+            value: Number(form.value) || 0,
+            score: Number(form.score) || 70,
+            notes: form.notes,
+          }),
+        })
+        if (!res.ok) throw new Error(await res.text())
+
+      } else if (activeModal === 'client') {
+        if (!form.name?.trim()) { setSubmitError('Nome é obrigatório'); setSubmitting(false); return }
+        const res = await fetch('/api/clients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: form.name.trim(),
+            phone: form.phone,
+            email: form.email,
+            company_name: form.company_name,
+            status: form.status || 'prospect',
+            value: Number(form.value) || 0,
+            deals: Number(form.deals) || 0,
+            score: Number(form.score) || 70,
+            since: form.since || new Date().toISOString().split('T')[0],
+          }),
+        })
+        if (!res.ok) throw new Error(await res.text())
+
+      } else if (activeModal === 'group') {
+        if (!form.subject?.trim()) { setSubmitError('Nome do grupo é obrigatório'); setSubmitting(false); return }
+        const participant = modalChat.participantJid || modalChat.id
+        const res = await fetch('/api/whatsapp/groups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subject: form.subject.trim(),
+            participants: [participant],
+          }),
+        })
+        if (!res.ok) throw new Error(await res.text())
+      }
+
+      setSuccess(true)
+      setTimeout(() => closeModal(), 1800)
+    } catch (err) {
+      setSubmitError(String(err).replace('Error: ', ''))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // ── Chat list loader ──────────────────────────────────────────────────────
+
   const loadChats = useCallback(async () => {
     try {
       const res = await fetch('/api/whatsapp/chats')
@@ -95,7 +277,6 @@ export default function WhatsappPage() {
       if (Array.isArray(data)) {
         setChats(data)
         setChatsError('')
-        // Sync unread count into global store
         const total = data.reduce((s: number, c: Chat) => s + (c.unread || 0), 0)
         setTotalUnread(total)
       } else {
@@ -106,86 +287,67 @@ export default function WhatsappPage() {
     } finally {
       setChatsLoading(false)
     }
-  }, [])
+  }, [setTotalUnread])
 
-  useEffect(() => {
-    loadChats()
-  }, [loadChats])
+  useEffect(() => { loadChats() }, [loadChats])
 
-  // Load messages for selected chat
+  // ── Messages loader ────────────────────────────────────────────────────────
+
   const loadMessages = useCallback(async (chatId: string, silent = false) => {
     if (!silent) setMsgsLoading(true)
     try {
       const res = await fetch(`/api/whatsapp/chats/${encodeURIComponent(chatId)}/messages`)
       const data = await res.json()
       if (Array.isArray(data)) setMessages(data)
-    } catch {
-      // ignore polling errors
-    } finally {
-      setMsgsLoading(false)
-    }
+    } catch { /* ignore */ }
+    finally { setMsgsLoading(false) }
   }, [])
 
   useEffect(() => {
     if (!selectedId) return
     setMessages([])
     loadMessages(selectedId)
-
-    // Poll for new messages every 5s
     if (pollRef.current) clearInterval(pollRef.current)
     pollRef.current = setInterval(() => loadMessages(selectedId, true), 5000)
-
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
-    }
+    return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [selectedId, loadMessages])
 
-  // Scroll to bottom when messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
 
+  // ── Send message ─────────────────────────────────────────────────────────
+
   const sendMessage = async () => {
     const text = input.trim()
     if (!text || !selectedId || sending) return
-
-    const optimistic: Msg = {
-      id: `opt-${Date.now()}`,
-      from: 'me',
-      text,
-      time: '',
-      timestamp: Math.floor(Date.now() / 1000),
-    }
-
-    setMessages(prev => [...prev, optimistic])
+    setMessages(prev => [...prev, { id: `opt-${Date.now()}`, from: 'me', text, time: '', timestamp: Math.floor(Date.now() / 1000) }])
     setInput('')
     setSending(true)
-
     try {
-      // Evolution API expects the number without @s.whatsapp.net
-      const number = selectedId.replace('@s.whatsapp.net', '').replace('@g.us', '')
+      const number = selectedId.replace('@s.whatsapp.net', '').replace('@g.us', '').replace('@lid', '')
       await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ number, text }),
       })
-    } catch {
-      // keep optimistic msg
-    } finally {
-      setSending(false)
-    }
+    } catch { /* keep optimistic */ }
+    finally { setSending(false) }
   }
+
+  // ── Derived state ─────────────────────────────────────────────────────────
 
   const selectedChat = chats.find(c => c.id === selectedId)
   const filtered = chats.filter(c =>
     c.isGroup === (tab === 'groups') &&
     (!search || c.name.toLowerCase().includes(search.toLowerCase()))
   )
-
   const individualChats = chats.filter(c => !c.isGroup)
   const groupChats = chats.filter(c => c.isGroup)
   const individualUnread = individualChats.reduce((s, c) => s + (c.unread || 0), 0)
   const groupUnread = groupChats.reduce((s, c) => s + (c.unread || 0), 0)
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
@@ -204,54 +366,37 @@ export default function WhatsappPage() {
         }
       />
 
-      <div
-        className="rounded-2xl border border-white/10 bg-white/3 overflow-hidden flex"
-        style={{ height: 'calc(100vh - 220px)', minHeight: 520 }}
-      >
-        {/* ── Chat list ── */}
+      <div className="rounded-2xl border border-white/10 bg-white/3 overflow-hidden flex" style={{ height: 'calc(100vh - 220px)', minHeight: 520 }}>
+
+        {/* ── Sidebar ── */}
         <div className="w-80 shrink-0 border-r border-white/10 flex flex-col">
+
           {/* Tabs */}
           <div className="flex border-b border-white/10">
-            <button
-              onClick={() => { setTab('chats'); setSelectedId(null) }}
-              className={cn(
-                'flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold transition-colors relative',
-                tab === 'chats'
-                  ? 'text-white'
-                  : 'text-slate-500 hover:text-slate-300',
-              )}
-            >
-              <MessageCircle className="w-3.5 h-3.5" />
-              Conversas
-              {individualUnread > 0 && (
-                <span className="min-w-[16px] h-4 rounded-full bg-green-500 text-white text-[9px] flex items-center justify-center font-bold px-1">
-                  {individualUnread > 9 ? '9+' : individualUnread}
-                </span>
-              )}
-              {tab === 'chats' && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t-full" />
-              )}
-            </button>
-            <button
-              onClick={() => { setTab('groups'); setSelectedId(null) }}
-              className={cn(
-                'flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold transition-colors relative',
-                tab === 'groups'
-                  ? 'text-white'
-                  : 'text-slate-500 hover:text-slate-300',
-              )}
-            >
-              <Users className="w-3.5 h-3.5" />
-              Grupos
-              {groupUnread > 0 && (
-                <span className="min-w-[16px] h-4 rounded-full bg-green-500 text-white text-[9px] flex items-center justify-center font-bold px-1">
-                  {groupUnread > 9 ? '9+' : groupUnread}
-                </span>
-              )}
-              {tab === 'groups' && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t-full" />
-              )}
-            </button>
+            {(['chats', 'groups'] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => { setTab(t); setSelectedId(null) }}
+                className={cn(
+                  'flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold transition-colors relative',
+                  tab === t ? 'text-white' : 'text-slate-500 hover:text-slate-300',
+                )}
+              >
+                {t === 'chats' ? <MessageCircle className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
+                {t === 'chats' ? 'Conversas' : 'Grupos'}
+                {t === 'chats' && individualUnread > 0 && (
+                  <span className="min-w-[16px] h-4 rounded-full bg-green-500 text-white text-[9px] flex items-center justify-center font-bold px-1">
+                    {individualUnread > 9 ? '9+' : individualUnread}
+                  </span>
+                )}
+                {t === 'groups' && groupUnread > 0 && (
+                  <span className="min-w-[16px] h-4 rounded-full bg-green-500 text-white text-[9px] flex items-center justify-center font-bold px-1">
+                    {groupUnread > 9 ? '9+' : groupUnread}
+                  </span>
+                )}
+                {tab === t && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t-full" />}
+              </button>
+            ))}
           </div>
 
           {/* Search */}
@@ -267,6 +412,7 @@ export default function WhatsappPage() {
             </div>
           </div>
 
+          {/* Chat list */}
           <div className="flex-1 overflow-y-auto">
             {chatsLoading ? (
               <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
@@ -277,71 +423,70 @@ export default function WhatsappPage() {
               <div className="flex flex-col items-center justify-center h-full gap-3 px-4 text-center">
                 <MessageCircle className="w-8 h-8 text-slate-600" />
                 <p className="text-xs text-red-400">{chatsError}</p>
-                <button
-                  onClick={() => { setChatsLoading(true); loadChats() }}
-                  className="text-xs text-blue-400 hover:text-blue-300"
-                >
-                  Tentar novamente
-                </button>
+                <button onClick={() => { setChatsLoading(true); loadChats() }} className="text-xs text-blue-400 hover:text-blue-300">Tentar novamente</button>
               </div>
             ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-500">
-                {tab === 'groups'
-                  ? <Users className="w-8 h-8 text-slate-600" />
-                  : <MessageCircle className="w-8 h-8 text-slate-600" />
-                }
-                <p className="text-xs">
-                  {tab === 'groups' ? 'Nenhum grupo encontrado' : 'Nenhuma conversa encontrada'}
-                </p>
+                {tab === 'groups' ? <Users className="w-8 h-8 text-slate-600" /> : <MessageCircle className="w-8 h-8 text-slate-600" />}
+                <p className="text-xs">{tab === 'groups' ? 'Nenhum grupo encontrado' : 'Nenhuma conversa encontrada'}</p>
               </div>
             ) : (
-              filtered.map(c => (
-                <button
-                  key={c.id}
-                  onClick={() => {
-                    setSelectedId(c.id)
-                    clearChatUnread(c.id)
-                    // Tell the notifier this chat is now active
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    ;(window as any).__waSetSelectedChat?.(c.id)
-                    // Mark as read in local chat list
-                    setChats(prev => {
-                      const updated = prev.map(x => x.id === c.id ? { ...x, unread: 0 } : x)
-                      const total = updated.reduce((s, x) => s + (x.unread || 0), 0)
-                      setTotalUnread(total)
-                      return updated
-                    })
-                  }}
-                  className={cn(
-                    'w-full flex items-center gap-3 px-4 py-3 text-left border-b border-white/5 transition-colors',
-                    selectedId === c.id ? 'bg-blue-500/10 border-l-2 border-l-blue-500' : 'hover:bg-white/5',
-                  )}
-                >
-                  <div className={cn(
-                    'w-9 h-9 rounded-full bg-gradient-to-br flex items-center justify-center text-xs font-bold text-white shrink-0',
-                    chatGradient(c.id)
-                  )}>
-                    {c.isGroup ? <Users className="w-4 h-4" /> : initials(c.name)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <p className="text-xs font-semibold text-white truncate">{c.name}</p>
-                      <span className="text-[10px] text-slate-500 shrink-0 ml-1">{timeLabel(c.timestamp)}</span>
+              filtered.map(c => {
+                const count = localUnread[c.id] ?? c.unread
+                const badgeLabel = count > 4 ? '4+' : String(count)
+                return (
+                  <div
+                    key={c.id}
+                    onContextMenu={e => openCtxMenu(e, c)}
+                    onClick={() => {
+                      setSelectedId(c.id)
+                      clearChatUnread(c.id)
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      ;(window as any).__waSetSelectedChat?.(c.id)
+                      setChats(prev => {
+                        const updated = prev.map(x => x.id === c.id ? { ...x, unread: 0 } : x)
+                        setTotalUnread(updated.reduce((s, x) => s + (x.unread || 0), 0))
+                        return updated
+                      })
+                    }}
+                    className={cn(
+                      'group relative w-full flex items-center gap-3 px-3 py-3 text-left border-b border-white/5 transition-colors cursor-pointer select-none',
+                      selectedId === c.id ? 'bg-blue-500/10 border-l-2 border-l-blue-500' : 'hover:bg-white/5',
+                    )}
+                  >
+                    {/* Avatar */}
+                    <div className={cn('w-9 h-9 rounded-full bg-gradient-to-br flex items-center justify-center text-xs font-bold text-white shrink-0', chatGradient(c.id))}>
+                      {c.isGroup ? <Users className="w-4 h-4" /> : initials(c.name)}
                     </div>
-                    <p className="text-[11px] text-slate-500 truncate">{c.lastMsg}</p>
+
+                    {/* Name + last msg */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <p className="text-xs font-semibold text-white truncate pr-1">{c.name}</p>
+                        <span className="text-[10px] text-slate-500 shrink-0">{timeLabel(c.timestamp)}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 truncate">{c.lastMsg}</p>
+                    </div>
+
+                    {/* Badge + three-dot */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {count > 0 && (
+                        <span className="min-w-[18px] h-[18px] rounded-full bg-green-500 text-white text-[10px] flex items-center justify-center font-bold px-1">
+                          {badgeLabel}
+                        </span>
+                      )}
+                      {/* Three-dot button */}
+                      <button
+                        onClick={e => { e.stopPropagation(); openCtxMenu(e, c) }}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-white/15 transition-all"
+                        title="Mais opções"
+                      >
+                        <MoreVertical className="w-3.5 h-3.5 text-slate-400" />
+                      </button>
+                    </div>
                   </div>
-                  {(() => {
-                    const count = localUnread[c.id] ?? c.unread
-                    if (count <= 0) return null
-                    const label = count > 4 ? '4+' : String(count)
-                    return (
-                      <span className="min-w-[18px] h-[18px] rounded-full bg-green-500 text-white text-[10px] flex items-center justify-center font-bold shrink-0 px-1">
-                        {label}
-                      </span>
-                    )
-                  })()}
-                </button>
-              ))
+                )
+              })
             )}
           </div>
 
@@ -349,78 +494,59 @@ export default function WhatsappPage() {
           {!chatsLoading && !chatsError && (
             <div className="px-4 py-2 border-t border-white/10 flex items-center gap-3 text-[11px] text-slate-500">
               {tab === 'chats' ? (
-                <>
-                  <span>{individualChats.length} conversas</span>
-                  <span>·</span>
-                  <span>{individualChats.filter(c => c.unread > 0).length} não lidas</span>
-                </>
+                <><span>{individualChats.length} conversas</span><span>·</span><span>{individualChats.filter(c => c.unread > 0).length} não lidas</span></>
               ) : (
-                <>
-                  <span>{groupChats.length} grupos</span>
-                  <span>·</span>
-                  <span>{groupChats.filter(c => c.unread > 0).length} não lidos</span>
-                </>
+                <><span>{groupChats.length} grupos</span><span>·</span><span>{groupChats.filter(c => c.unread > 0).length} não lidos</span></>
               )}
             </div>
           )}
         </div>
 
-        {/* ── Active conversation ── */}
+        {/* ── Active chat ── */}
         <div className="flex-1 flex flex-col min-w-0">
           {!selectedChat ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-500">
               <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center">
-                {tab === 'groups'
-                  ? <Users className="w-8 h-8 text-slate-600" />
-                  : <MessageCircle className="w-8 h-8 text-slate-600" />
-                }
+                {tab === 'groups' ? <Users className="w-8 h-8 text-slate-600" /> : <MessageCircle className="w-8 h-8 text-slate-600" />}
               </div>
-              <p className="text-sm">
-                {tab === 'groups' ? 'Selecione um grupo' : 'Selecione uma conversa'}
-              </p>
+              <p className="text-sm">{tab === 'groups' ? 'Selecione um grupo' : 'Selecione uma conversa'}</p>
             </div>
           ) : (
             <>
-              {/* Contact header */}
               <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/10">
-                <div className={cn(
-                  'w-9 h-9 rounded-full bg-gradient-to-br flex items-center justify-center text-xs font-bold text-white shrink-0',
-                  chatGradient(selectedChat.id)
-                )}>
+                <div className={cn('w-9 h-9 rounded-full bg-gradient-to-br flex items-center justify-center text-xs font-bold text-white shrink-0', chatGradient(selectedChat.id))}>
                   {selectedChat.isGroup ? <Users className="w-4 h-4" /> : initials(selectedChat.name)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white truncate">{selectedChat.name}</p>
-                  <p className="text-xs text-slate-500 truncate">
-                    {selectedChat.id.replace('@s.whatsapp.net', '').replace('@g.us', '')}
-                  </p>
+                  <p className="text-xs text-slate-500 truncate">{selectedChat.phone || selectedChat.id.split('@')[0]}</p>
                 </div>
+                {/* Quick action button in header */}
+                {!selectedChat.isGroup && (
+                  <button
+                    onClick={e => openCtxMenu(e, selectedChat)}
+                    className="p-2 rounded-xl hover:bg-white/8 text-slate-400 hover:text-white transition-colors"
+                    title="Mais opções"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                )}
               </div>
 
-              {/* Messages */}
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
                 {msgsLoading ? (
-                  <div className="flex items-center justify-center h-full">
-                    <Loader2 className="w-6 h-6 animate-spin text-slate-500" />
-                  </div>
+                  <div className="flex items-center justify-center h-full"><Loader2 className="w-6 h-6 animate-spin text-slate-500" /></div>
                 ) : messages.length === 0 ? (
-                  <div className="flex items-center justify-center h-full text-slate-500 text-sm">
-                    Nenhuma mensagem encontrada
-                  </div>
+                  <div className="flex items-center justify-center h-full text-slate-500 text-sm">Nenhuma mensagem encontrada</div>
                 ) : (
                   messages.map(m => (
                     <div key={m.id} className={cn('flex', m.from === 'me' ? 'justify-end' : 'justify-start')}>
                       <div className={cn(
                         'max-w-[65%] rounded-2xl px-4 py-2.5 text-sm',
-                        m.from === 'me'
-                          ? 'bg-green-600 text-white rounded-br-sm'
-                          : 'bg-white/8 border border-white/10 text-slate-200 rounded-bl-sm',
+                        m.from === 'me' ? 'bg-green-600 text-white rounded-br-sm' : 'bg-white/8 border border-white/10 text-slate-200 rounded-bl-sm',
                       )}>
-                        {/* Show sender name inside group messages */}
-                        {m.from === 'them' && selectedChat?.isGroup && m.senderName && (
-                          <p className="text-[11px] font-semibold mb-1 text-blue-400">
-                            {m.senderName}
-                          </p>
+                        {m.from === 'them' && selectedChat.isGroup && m.senderName && (
+                          <p className="text-[11px] font-semibold mb-1 text-blue-400">{m.senderName}</p>
                         )}
                         <p className="break-words whitespace-pre-wrap">{m.text}</p>
                         <p className={cn('text-[10px] mt-1', m.from === 'me' ? 'text-green-200 text-right' : 'text-slate-500')}>
@@ -433,7 +559,6 @@ export default function WhatsappPage() {
                 <div ref={bottomRef} />
               </div>
 
-              {/* Input */}
               <div className="px-5 py-4 border-t border-white/10">
                 <div className="flex gap-3">
                   <input
@@ -456,6 +581,236 @@ export default function WhatsappPage() {
           )}
         </div>
       </div>
+
+      {/* ── Context menu ── */}
+      {ctxMenu && (
+        <div
+          className="fixed z-50 bg-[#0d1526] border border-white/12 rounded-xl shadow-2xl py-1.5 w-52 overflow-hidden"
+          style={{ top: ctxMenu.y, left: ctxMenu.x }}
+          onClick={e => e.stopPropagation()}
+        >
+          <p className="px-3 py-1.5 text-[10px] text-slate-500 font-semibold uppercase tracking-wide truncate border-b border-white/8 mb-1">
+            {ctxMenu.chat.name}
+          </p>
+
+          <button
+            onClick={() => openModal('lead', ctxMenu.chat)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/8 transition-colors text-left"
+          >
+            <UserPlus className="w-4 h-4 text-blue-400" />
+            Adicionar como Lead
+          </button>
+
+          <button
+            onClick={() => openModal('client', ctxMenu.chat)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/8 transition-colors text-left"
+          >
+            <Briefcase className="w-4 h-4 text-violet-400" />
+            Adicionar como Cliente
+          </button>
+
+          {!ctxMenu.chat.isGroup && (
+            <button
+              onClick={() => openModal('group', ctxMenu.chat)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/8 transition-colors text-left"
+            >
+              <UsersRound className="w-4 h-4 text-emerald-400" />
+              Criar Grupo com Contato
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Modal ── */}
+      {activeModal && modalChat && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={closeModal}>
+          <div
+            className="relative bg-[#0a1020] border border-white/10 rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-2.5">
+                {activeModal === 'lead' && <UserPlus className="w-4 h-4 text-blue-400" />}
+                {activeModal === 'client' && <Briefcase className="w-4 h-4 text-violet-400" />}
+                {activeModal === 'group' && <UsersRound className="w-4 h-4 text-emerald-400" />}
+                <h2 className="text-sm font-semibold text-white">
+                  {activeModal === 'lead' && 'Adicionar como Lead'}
+                  {activeModal === 'client' && 'Adicionar como Cliente'}
+                  {activeModal === 'group' && 'Criar Grupo WhatsApp'}
+                </h2>
+              </div>
+              <button onClick={closeModal} className="p-1.5 rounded-lg hover:bg-white/8 text-slate-400 hover:text-white transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Success state */}
+            {success ? (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 py-12">
+                <div className="w-14 h-14 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <Check className="w-7 h-7 text-green-400" />
+                </div>
+                <p className="text-sm font-semibold text-white">
+                  {activeModal === 'lead' && 'Lead criado com sucesso!'}
+                  {activeModal === 'client' && 'Cliente criado com sucesso!'}
+                  {activeModal === 'group' && 'Grupo criado com sucesso!'}
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Form body */}
+                <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+
+                  {/* ── Lead fields ── */}
+                  {activeModal === 'lead' && (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="col-span-2">
+                          <Field label="Nome" required>
+                            <input value={form.name} onChange={e => setField('name', e.target.value)} placeholder="Nome do lead" className={inputCls} />
+                          </Field>
+                        </div>
+                        <Field label="Telefone">
+                          <input value={form.phone} onChange={e => setField('phone', e.target.value)} placeholder="(11) 9 9999-9999" className={inputCls} />
+                        </Field>
+                        <Field label="E-mail">
+                          <input type="email" value={form.email} onChange={e => setField('email', e.target.value)} placeholder="email@exemplo.com" className={inputCls} />
+                        </Field>
+                        <div className="col-span-2">
+                          <Field label="Empresa">
+                            <input value={form.company} onChange={e => setField('company', e.target.value)} placeholder="Nome da empresa" className={inputCls} />
+                          </Field>
+                        </div>
+                        <Field label="Status">
+                          <select value={form.status} onChange={e => setField('status', e.target.value)} className={selectCls}>
+                            <option value="new">Novo</option>
+                            <option value="contacted">Em Contato</option>
+                            <option value="qualified">Qualificado</option>
+                            <option value="proposal">Proposta Enviada</option>
+                            <option value="negotiation">Em Negociação</option>
+                            <option value="closed_won">Fechado (Ganho)</option>
+                            <option value="closed_lost">Fechado (Perdido)</option>
+                          </select>
+                        </Field>
+                        <Field label="Temperatura">
+                          <select value={form.temperature} onChange={e => setField('temperature', e.target.value)} className={selectCls}>
+                            <option value="cold">❄️ Frio</option>
+                            <option value="warm">🌡️ Morno</option>
+                            <option value="hot">🔥 Quente</option>
+                          </select>
+                        </Field>
+                        <Field label="Valor estimado (R$)">
+                          <input type="number" min="0" value={form.value} onChange={e => setField('value', e.target.value)} placeholder="0" className={inputCls} />
+                        </Field>
+                        <Field label="Score (0-100)">
+                          <input type="number" min="0" max="100" value={form.score} onChange={e => setField('score', e.target.value)} placeholder="70" className={inputCls} />
+                        </Field>
+                        <div className="col-span-2">
+                          <Field label="Notas">
+                            <textarea value={form.notes} onChange={e => setField('notes', e.target.value)} placeholder="Observações sobre o lead..." rows={3} className={`${inputCls} resize-none`} />
+                          </Field>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* ── Client fields ── */}
+                  {activeModal === 'client' && (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="col-span-2">
+                          <Field label="Nome" required>
+                            <input value={form.name} onChange={e => setField('name', e.target.value)} placeholder="Nome do cliente" className={inputCls} />
+                          </Field>
+                        </div>
+                        <Field label="Telefone">
+                          <input value={form.phone} onChange={e => setField('phone', e.target.value)} placeholder="(11) 9 9999-9999" className={inputCls} />
+                        </Field>
+                        <Field label="E-mail">
+                          <input type="email" value={form.email} onChange={e => setField('email', e.target.value)} placeholder="email@exemplo.com" className={inputCls} />
+                        </Field>
+                        <div className="col-span-2">
+                          <Field label="Empresa / Razão Social">
+                            <input value={form.company_name} onChange={e => setField('company_name', e.target.value)} placeholder="Nome da empresa" className={inputCls} />
+                          </Field>
+                        </div>
+                        <Field label="Status">
+                          <select value={form.status} onChange={e => setField('status', e.target.value)} className={selectCls}>
+                            <option value="prospect">Prospect</option>
+                            <option value="active">Ativo</option>
+                            <option value="inactive">Inativo</option>
+                            <option value="vip">⭐ VIP</option>
+                          </select>
+                        </Field>
+                        <Field label="Qtd. negócios">
+                          <input type="number" min="0" value={form.deals} onChange={e => setField('deals', e.target.value)} placeholder="0" className={inputCls} />
+                        </Field>
+                        <Field label="Valor total (R$)">
+                          <input type="number" min="0" value={form.value} onChange={e => setField('value', e.target.value)} placeholder="0" className={inputCls} />
+                        </Field>
+                        <Field label="Score (0-100)">
+                          <input type="number" min="0" max="100" value={form.score} onChange={e => setField('score', e.target.value)} placeholder="70" className={inputCls} />
+                        </Field>
+                        <div className="col-span-2">
+                          <Field label="Cliente desde">
+                            <input type="date" value={form.since} onChange={e => setField('since', e.target.value)} className={inputCls} />
+                          </Field>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* ── Group fields ── */}
+                  {activeModal === 'group' && (
+                    <>
+                      <div className="p-3 rounded-xl bg-white/5 border border-white/8 flex items-center gap-2.5 mb-1">
+                        <div className={cn('w-8 h-8 rounded-full bg-gradient-to-br flex items-center justify-center text-xs font-bold text-white shrink-0', chatGradient(modalChat.id))}>
+                          {initials(modalChat.name)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-white truncate">{modalChat.name}</p>
+                          <p className="text-[11px] text-slate-500">será adicionado ao grupo</p>
+                        </div>
+                      </div>
+                      <Field label="Nome do grupo" required>
+                        <input
+                          value={form.subject}
+                          onChange={e => setField('subject', e.target.value)}
+                          placeholder="Ex: Equipe de Vendas"
+                          className={inputCls}
+                          autoFocus
+                        />
+                      </Field>
+                    </>
+                  )}
+
+                  {submitError && (
+                    <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{submitError}</p>
+                  )}
+                </div>
+
+                {/* Modal footer */}
+                <div className="px-5 py-4 border-t border-white/10 flex gap-3 shrink-0">
+                  <button onClick={closeModal} className="flex-1 py-2.5 rounded-xl border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 text-sm transition-colors">
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={submitting}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 disabled:opacity-50 text-white text-sm font-semibold transition-all flex items-center justify-center gap-2"
+                  >
+                    {submitting
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : (activeModal === 'group' ? 'Criar Grupo' : activeModal === 'lead' ? 'Criar Lead' : 'Criar Cliente')
+                    }
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
