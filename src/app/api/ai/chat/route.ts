@@ -9,6 +9,26 @@ const MAX_TOOL_ITERATIONS = 6
 // Keep model loaded in memory for 10 years (Ollama 0.24 doesn't accept -1 literal)
 const KEEP_ALIVE = '87600h'
 
+// Keywords that indicate the user wants to interact with the CRM.
+// When none match, we skip sending the large tool definitions (~750 tokens)
+// and respond 5-10x faster with a plain conversational reply.
+const CRM_KEYWORDS = [
+  'lead', 'leads', 'cliente', 'clientes', 'criar', 'cria', 'crie',
+  'listar', 'lista', 'ver', 'veja', 'mostrar', 'mostre',
+  'agendar', 'agenda', 'evento', 'eventos', 'reunião', 'reuniao',
+  'atualizar', 'atualiza', 'atualize', 'remover', 'remove', 'deletar',
+  'buscar', 'busca', 'pesquisar', 'encontrar', 'cadastrar', 'cadastra',
+  'novo lead', 'nova reunião', 'meus leads', 'meus clientes',
+]
+
+function needsCRMTools(messages: Array<{ role: string; content: string }>): boolean {
+  // Check only the last user message
+  const lastUser = [...messages].reverse().find(m => m.role === 'user')
+  if (!lastUser) return false
+  const lower = lastUser.content.toLowerCase()
+  return CRM_KEYWORDS.some(k => lower.includes(k))
+}
+
 type OllamaMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
@@ -27,7 +47,7 @@ type OllamaResponse = {
   done: boolean
 }
 
-async function ollamaChat(messages: OllamaMessage[]): Promise<OllamaResponse> {
+async function ollamaChat(messages: OllamaMessage[], withTools: boolean): Promise<OllamaResponse> {
   const res = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -35,9 +55,9 @@ async function ollamaChat(messages: OllamaMessage[]): Promise<OllamaResponse> {
       model: MODEL,
       messages,
       stream: false,
-      tools: toolDefinitions,
+      ...(withTools ? { tools: toolDefinitions } : {}),
       keep_alive: KEEP_ALIVE,
-      options: { temperature: 0.3, num_predict: 1024 },
+      options: { temperature: 0.3, num_predict: 512 },
     }),
   })
 
@@ -46,6 +66,33 @@ async function ollamaChat(messages: OllamaMessage[]): Promise<OllamaResponse> {
   }
 
   return res.json() as Promise<OllamaResponse>
+}
+
+function makeStream(text: string, toolsUsed: string[]): Response {
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    start(controller) {
+      if (toolsUsed.length) {
+        controller.enqueue(encoder.encode(JSON.stringify({ _tools: toolsUsed }) + '\n'))
+      }
+      const words = text.split(/(\s+)/)
+      let idx = 0
+      function pushNext() {
+        if (idx >= words.length) { controller.close(); return }
+        controller.enqueue(encoder.encode(words[idx++]))
+        setTimeout(pushNext, 12)
+      }
+      pushNext()
+    },
+  })
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Transfer-Encoding': 'chunked',
+      'X-Accel-Buffering': 'no',
+      'Cache-Control': 'no-cache',
+    },
+  })
 }
 
 export async function POST(request: NextRequest) {
@@ -61,106 +108,50 @@ export async function POST(request: NextRequest) {
 
   const today = new Date()
   const dateStr = today.toLocaleDateString('pt-BR', {
-    weekday: 'long',
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
   })
   const timeStr = today.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
   const systemPrompt: OllamaMessage = {
     role: 'system',
-    content: `Você é um assistente de vendas e CRM inteligente da Startsette com acesso total ao sistema.
-Data e hora atual: ${dateStr}, ${timeStr}.
-
-Suas capacidades:
-- Criar, listar, atualizar leads
-- Criar e listar clientes
-- Criar, listar e remover eventos na agenda
-
-Regras importantes:
-- Responda SEMPRE em português brasileiro.
-- Quando o usuário pedir para fazer algo no CRM, use as ferramentas imediatamente — não peça confirmação desnecessária.
-- Se faltar apenas o nome (para criar lead/cliente), pergunte somente o nome e crie em seguida.
-- Se faltar data/hora para criar evento, pergunte só esses dados essenciais.
-- Após executar uma ação, confirme o que foi feito de forma clara e amigável.
-- Para consultas (listar leads, ver agenda), execute a ferramenta e apresente os dados de forma organizada.
-- Você também pode dar conselhos de vendas, estratégias de follow-up e análises gerais de negócios.`,
+    content: `Você é um assistente de vendas e CRM da Startsette. Data: ${dateStr}, ${timeStr}.
+Responda SEMPRE em português brasileiro. Seja direto e amigável.
+Capacidades: criar/listar/atualizar leads, clientes e eventos na agenda.
+Ao executar ações no CRM, use as ferramentas sem pedir confirmação desnecessária.`,
   }
 
-  const conversation: OllamaMessage[] = [
-    systemPrompt,
-    ...(messages as OllamaMessage[]),
-  ]
-
+  const withTools = needsCRMTools(messages)
+  const conversation: OllamaMessage[] = [systemPrompt, ...(messages as OllamaMessage[])]
   const toolsUsed: string[] = []
 
   try {
-    // ── Agentic tool loop ──────────────────────────────────────────────────
+    if (!withTools) {
+      // ── Fast path: no CRM intent → skip tool definitions, respond quickly ──
+      const data = await ollamaChat(conversation, false)
+      return makeStream(data.message.content?.trim() || 'Olá! Como posso ajudar?', [])
+    }
+
+    // ── CRM path: agentic tool loop ────────────────────────────────────────
     for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-      const data = await ollamaChat(conversation)
+      const data = await ollamaChat(conversation, true)
       const assistantMsg = data.message
 
-      // No tool calls → stream the response we already have back to the client
       if (!assistantMsg.tool_calls?.length) {
-        const finalText = assistantMsg.content?.trim() || 'Pronto!'
-        const encoder = new TextEncoder()
-
-        const stream = new ReadableStream({
-          start(controller) {
-            // Emit tools metadata as first line (JSON) so the UI can show badges
-            if (toolsUsed.length) {
-              const meta = JSON.stringify({ _tools: toolsUsed }) + '\n'
-              controller.enqueue(encoder.encode(meta))
-            }
-
-            // Word-by-word streaming for a natural typing feel
-            const words = finalText.split(/(\s+)/)
-            let idx = 0
-
-            function pushNext() {
-              if (idx >= words.length) {
-                controller.close()
-                return
-              }
-              controller.enqueue(encoder.encode(words[idx++]))
-              setTimeout(pushNext, 12)
-            }
-            pushNext()
-          },
-        })
-
-        return new Response(stream, {
-          headers: {
-            'Content-Type': 'text/plain; charset=utf-8',
-            'Transfer-Encoding': 'chunked',
-            'X-Accel-Buffering': 'no',
-            'Cache-Control': 'no-cache',
-          },
-        })
+        return makeStream(assistantMsg.content?.trim() || 'Pronto!', toolsUsed)
       }
 
-      // ── Tool calls detected — execute them ─────────────────────────────
       conversation.push(assistantMsg)
 
       for (const call of assistantMsg.tool_calls) {
         const toolName = call.function.name
         const toolArgs = call.function.arguments ?? {}
         toolsUsed.push(toolName)
-
         const result = await executeTool(toolName, toolArgs, user)
-
-        conversation.push({
-          role: 'tool',
-          content: result,
-        })
+        conversation.push({ role: 'tool', content: result })
       }
-
-      // Continue loop — Ollama will now generate a response using tool results
     }
 
-    // Fallback if loop exhausted without a text response
-    return new Response('Não consegui completar a operação. Por favor, tente novamente.', {
+    return new Response('Não consegui completar a operação. Tente novamente.', {
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     })
   } catch (err) {
