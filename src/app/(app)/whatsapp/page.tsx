@@ -5,7 +5,7 @@ import { usePageTitle } from '@/hooks/usePageTitle'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import {
   Send, Search, RefreshCw, Users, MessageCircle, Loader2,
-  MoreVertical, X, Check, UserPlus, Briefcase, UsersRound,
+  MoreVertical, X, Check, UserPlus, Briefcase, UsersRound, Contact,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { useWhatsAppStore } from '@/store/whatsapp.store'
@@ -33,7 +33,7 @@ type Msg = {
   senderName?: string | null
 }
 
-type ModalType = 'lead' | 'client' | 'group'
+type ModalType = 'lead' | 'client' | 'group' | 'contact'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -167,7 +167,9 @@ export default function WhatsappPage() {
     const phoneName = isPhoneName(chat.name) ? '' : chat.name
     const phoneVal = chat.phone || chat.name
 
-    if (type === 'lead') {
+    if (type === 'contact') {
+      setForm({ name: '', phone: phoneVal })
+    } else if (type === 'lead') {
       setForm({
         name: phoneName,
         phone: phoneVal,
@@ -213,7 +215,20 @@ export default function WhatsappPage() {
     setSubmitError('')
 
     try {
-      if (activeModal === 'lead') {
+      if (activeModal === 'contact') {
+        if (!form.name?.trim()) { setSubmitError('Nome é obrigatório'); setSubmitting(false); return }
+        const res = await fetch('/api/whatsapp/contacts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: modalChat.phone, name: form.name.trim() }),
+        })
+        if (!res.ok) throw new Error(await res.text())
+        // Update local chat name immediately
+        setChats(prev => prev.map(c =>
+          c.id === modalChat.id ? { ...c, name: form.name.trim() } : c
+        ))
+
+      } else if (activeModal === 'lead') {
         if (!form.name?.trim()) { setSubmitError('Nome é obrigatório'); setSubmitting(false); return }
         const res = await fetch('/api/leads', {
           method: 'POST',
@@ -625,6 +640,20 @@ export default function WhatsappPage() {
               Criar Grupo com Contato
             </button>
           )}
+
+          {/* Only show "Save Contact" for contacts whose name looks like a phone number */}
+          {!ctxMenu.chat.isGroup && isPhoneName(ctxMenu.chat.name) && (
+            <>
+              <div className="my-1 border-t border-white/8" />
+              <button
+                onClick={() => openModal('contact', ctxMenu.chat)}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/8 transition-colors text-left"
+              >
+                <Contact className="w-4 h-4 text-green-400" />
+                Salvar Contato
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -638,10 +667,12 @@ export default function WhatsappPage() {
             {/* Modal header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
               <div className="flex items-center gap-2.5">
+                {activeModal === 'contact' && <Contact className="w-4 h-4 text-green-400" />}
                 {activeModal === 'lead' && <UserPlus className="w-4 h-4 text-blue-400" />}
                 {activeModal === 'client' && <Briefcase className="w-4 h-4 text-violet-400" />}
                 {activeModal === 'group' && <UsersRound className="w-4 h-4 text-emerald-400" />}
                 <h2 className="text-sm font-semibold text-white">
+                  {activeModal === 'contact' && 'Salvar Contato'}
                   {activeModal === 'lead' && 'Adicionar como Lead'}
                   {activeModal === 'client' && 'Adicionar como Cliente'}
                   {activeModal === 'group' && 'Criar Grupo WhatsApp'}
@@ -659,6 +690,7 @@ export default function WhatsappPage() {
                   <Check className="w-7 h-7 text-green-400" />
                 </div>
                 <p className="text-sm font-semibold text-white">
+                  {activeModal === 'contact' && 'Contato salvo com sucesso!'}
                   {activeModal === 'lead' && 'Lead criado com sucesso!'}
                   {activeModal === 'client' && 'Cliente criado com sucesso!'}
                   {activeModal === 'group' && 'Grupo criado com sucesso!'}
@@ -668,6 +700,24 @@ export default function WhatsappPage() {
               <>
                 {/* Form body */}
                 <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+
+                  {/* ── Contact fields ── */}
+                  {activeModal === 'contact' && (
+                    <div className="space-y-3">
+                      <Field label="Nome" required>
+                        <input
+                          value={form.name}
+                          onChange={e => setField('name', e.target.value)}
+                          placeholder="Como você quer chamar esse contato?"
+                          className={inputCls}
+                          autoFocus
+                        />
+                      </Field>
+                      <Field label="Telefone">
+                        <input value={form.phone} readOnly className={`${inputCls} opacity-60 cursor-not-allowed`} />
+                      </Field>
+                    </div>
+                  )}
 
                   {/* ── Lead fields ── */}
                   {activeModal === 'lead' && (
@@ -809,7 +859,10 @@ export default function WhatsappPage() {
                   >
                     {submitting
                       ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : (activeModal === 'group' ? 'Criar Grupo' : activeModal === 'lead' ? 'Criar Lead' : 'Criar Cliente')
+                      : activeModal === 'contact' ? 'Salvar Contato'
+                      : activeModal === 'group' ? 'Criar Grupo'
+                      : activeModal === 'lead' ? 'Criar Lead'
+                      : 'Criar Cliente'
                     }
                   </button>
                 </div>

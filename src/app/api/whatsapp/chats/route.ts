@@ -45,12 +45,33 @@ function formatPhone(raw: string): string {
   return digits || raw
 }
 
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+
+async function getSavedContacts(companyId: string): Promise<Record<string, string>> {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/whatsapp_contacts?company_id=eq.${companyId}&select=phone,name`,
+      { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` }, cache: 'no-store' },
+    )
+    if (!res.ok) return {}
+    const rows: { phone: string; name: string }[] = await res.json()
+    const map: Record<string, string> = {}
+    for (const r of rows) map[r.phone] = r.name
+    return map
+  } catch { return {} }
+}
+
 export async function GET() {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    const rawChats = await evoFetch.post(`/chat/findChats/${EVO_INSTANCE}`, {})
+    // Fetch chats and saved contacts in parallel
+    const [rawChats, savedContacts] = await Promise.all([
+      evoFetch.post(`/chat/findChats/${EVO_INSTANCE}`, {}),
+      getSavedContacts(user.company_id),
+    ])
     const chats: EvoChat[] = Array.isArray(rawChats) ? rawChats : []
 
     const mapped = chats
@@ -72,10 +93,11 @@ export async function GET() {
         // Only use lastMessage.pushName when the sender is the contact (not us)
         const lastSenderName = lastMsgFromMe ? null : (lm?.pushName ?? null)
 
-        // Name resolution: saved/cached WA name → last received sender name → formatted phone
+        // Name resolution: manually saved > WA cached name > last received sender > formatted phone
+        const savedName = !isGroup ? (savedContacts[phoneRaw] ?? null) : null
         const name = isGroup
           ? (c.name || c.subject || c.pushName || lastSenderName || phoneFormatted)
-          : (c.pushName || lastSenderName || phoneFormatted)
+          : (savedName || c.pushName || lastSenderName || phoneFormatted)
 
         let lastText = '...'
         if (lm?.messageType === 'conversation' || lm?.messageType === 'extendedTextMessage') {
