@@ -3,7 +3,7 @@ import { getAuthUser } from '@/lib/utils/get-auth-user'
 import { anthropicTools, executeTool } from '../tools'
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? ''
-const MODEL = 'claude-3-5-haiku-20241022'
+const MODEL = 'claude-3-haiku-20240307'
 const MAX_TOOL_ITERATIONS = 6
 
 // ── Anthropic message types ────────────────────────────────────────────────────
