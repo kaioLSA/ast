@@ -3,6 +3,8 @@ import { getAuthUser } from '@/lib/utils/get-auth-user'
 import { anthropicTools, executeTool } from '../tools'
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? ''
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
 const MODEL = 'claude-haiku-4-5-20251001'
 const MAX_TOOL_ITERATIONS = 6
 
@@ -22,6 +24,66 @@ type AnthropicMessage = {
 type AnthropicResponse = {
   content: ContentBlock[]
   stop_reason: 'end_turn' | 'tool_use' | string
+}
+
+// ── Supabase helpers ───────────────────────────────────────────────────────────
+
+function sbHeaders() {
+  return {
+    apikey: SERVICE_KEY,
+    Authorization: `Bearer ${SERVICE_KEY}`,
+    'Content-Type': 'application/json',
+    Prefer: 'return=representation',
+  }
+}
+
+async function saveMessages(
+  conversationId: string,
+  userText: string,
+  assistantText: string,
+): Promise<void> {
+  const messages = [
+    { conversation_id: conversationId, role: 'user', content: userText },
+    { conversation_id: conversationId, role: 'assistant', content: assistantText },
+  ]
+
+  await fetch(`${SUPABASE_URL}/rest/v1/ai_messages`, {
+    method: 'POST',
+    headers: sbHeaders(),
+    body: JSON.stringify(messages),
+  })
+}
+
+async function updateConversation(
+  conversationId: string,
+  userId: string,
+  companyId: string,
+  firstUserMessage: string,
+): Promise<void> {
+  // Get current conversation to check if title is still default
+  const convRes = await fetch(
+    `${SUPABASE_URL}/rest/v1/ai_conversations?id=eq.${conversationId}&user_id=eq.${userId}&company_id=eq.${companyId}&select=title&limit=1`,
+    { headers: sbHeaders(), cache: 'no-store' },
+  )
+
+  if (!convRes.ok) return
+
+  const convData = await convRes.json()
+  const currentTitle = convData?.[0]?.title ?? ''
+
+  const patch: Record<string, string> = { updated_at: new Date().toISOString() }
+  if (currentTitle === 'Nova conversa') {
+    patch.title = firstUserMessage.slice(0, 50)
+  }
+
+  await fetch(
+    `${SUPABASE_URL}/rest/v1/ai_conversations?id=eq.${conversationId}&user_id=eq.${userId}&company_id=eq.${companyId}`,
+    {
+      method: 'PATCH',
+      headers: sbHeaders(),
+      body: JSON.stringify(patch),
+    },
+  )
 }
 
 // ── API call ───────────────────────────────────────────────────────────────────
@@ -49,7 +111,11 @@ async function claudeChat(system: string, messages: AnthropicMessage[]): Promise
 
 // ── Streaming helper ───────────────────────────────────────────────────────────
 
-function makeStream(text: string, toolsUsed: string[]): Response {
+function makeStream(
+  text: string,
+  toolsUsed: string[],
+  onFinish?: () => void,
+): Response {
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     start(controller) {
@@ -59,7 +125,11 @@ function makeStream(text: string, toolsUsed: string[]): Response {
       const words = text.split(/(\s+)/)
       let idx = 0
       function pushNext() {
-        if (idx >= words.length) { controller.close(); return }
+        if (idx >= words.length) {
+          controller.close()
+          onFinish?.()
+          return
+        }
         controller.enqueue(encoder.encode(words[idx++]))
         setTimeout(pushNext, 10)
       }
@@ -87,7 +157,10 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}))
-  const { messages } = body as { messages?: Array<{ role: string; content: string }> }
+  const { messages, conversationId } = body as {
+    messages?: Array<{ role: string; content: string }>
+    conversationId?: string
+  }
 
   if (!messages?.length) {
     return NextResponse.json({ error: 'messages é obrigatório' }, { status: 400 })
@@ -118,6 +191,9 @@ Regras:
     content: m.content,
   }))
 
+  // The last user message text (for saving and auto-title)
+  const lastUserMessage = messages.filter(m => m.role === 'user').at(-1)?.content ?? ''
+
   const toolsUsed: string[] = []
 
   try {
@@ -130,7 +206,16 @@ Regras:
       // No tools → final answer
       if (response.stop_reason !== 'tool_use' || toolBlocks.length === 0) {
         const finalText = textBlocks.map(b => b.text).join('').trim() || 'Pronto!'
-        return makeStream(finalText, toolsUsed)
+
+        // Save messages and update conversation asynchronously after stream finishes
+        const onFinish = conversationId
+          ? () => {
+              saveMessages(conversationId, lastUserMessage, finalText).catch(console.error)
+              updateConversation(conversationId, user.id, user.company_id, lastUserMessage).catch(console.error)
+            }
+          : undefined
+
+        return makeStream(finalText, toolsUsed, onFinish)
       }
 
       // Add assistant's response (with tool_use blocks) to conversation
