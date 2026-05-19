@@ -50,6 +50,22 @@ export function Topbar() {
     useNotificationsStore()
   const [open, setOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
+  const autoDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // When bell opens → mark all read + schedule auto-delete after 2min
+  // When bell closes → mark all read (remove unread dot)
+  useEffect(() => {
+    markAllAsRead()
+    if (open) {
+      // Snapshot current notification ids and delete them after 2min
+      const ids = notifications.map(n => n.id)
+      if (autoDeleteTimerRef.current) clearTimeout(autoDeleteTimerRef.current)
+      autoDeleteTimerRef.current = setTimeout(() => {
+        ids.forEach(id => removeNotification(id))
+      }, 2 * 60 * 1000)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   const pageTitle =
     pageTitles[pathname] ??

@@ -57,7 +57,8 @@ export async function GET() {
 
         const ts = c.updatedAt ? new Date(c.updatedAt).getTime() / 1000 : 0
 
-        const lastFromMe = lm?.key?.fromMe ?? true
+        // Default false (unknown = assume incoming) so notifications aren't silently suppressed
+        const lastFromMe = lm?.key?.fromMe ?? false
         return { id: jid, name, lastMsg: lastText, timestamp: ts, unread: c.unreadMessages ?? 0, isGroup, lastFromMe }
       })
       .sort((a: { timestamp: number }, b: { timestamp: number }) => b.timestamp - a.timestamp)
