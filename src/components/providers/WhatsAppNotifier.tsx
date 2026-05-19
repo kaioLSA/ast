@@ -74,7 +74,6 @@ function notify(senderName: string) {
     body: senderName,
     icon: '/st.png',
     tag: `wa-${senderName}`, // deduplicate per sender
-    renotify: true,
     silent: false,
   })
 }
