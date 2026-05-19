@@ -7,6 +7,8 @@ const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE
 type EvoChat = {
   remoteJid?: string
   pushName?: string | null
+  name?: string | null        // group subject (Evolution API)
+  subject?: string | null     // group subject (alt field)
   updatedAt?: string
   unreadMessages?: number
   lastMessage?: {
@@ -37,7 +39,10 @@ export async function GET() {
         const jid = c.remoteJid!
         const isGroup = jid.endsWith('@g.us')
         const number = jid.split('@')[0]
-        const name = c.pushName || c.lastMessage?.pushName || number
+        // Groups: prefer explicit subject/name fields; individuals: use pushName
+        const name = isGroup
+          ? (c.name || c.subject || number)
+          : (c.pushName || c.lastMessage?.pushName || number)
 
         const lm = c.lastMessage
         let lastText = '...'

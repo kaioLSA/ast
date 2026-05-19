@@ -6,7 +6,8 @@ const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE
 
 type EvoMsg = {
   id?: string
-  key?: { id?: string; fromMe?: boolean }
+  key?: { id?: string; fromMe?: boolean; participant?: string }
+  pushName?: string          // sender display name
   messageType?: string
   message?: {
     conversation?: string
@@ -60,8 +61,11 @@ export async function GET(
 
       const ts = m.messageTimestamp || (m.updatedAt ? Math.floor(new Date(m.updatedAt).getTime() / 1000) : 0)
 
+      // Sender name: pushName for received msgs, participant jid as fallback
+      const senderName = fromMe ? null : (m.pushName || m.key?.participant?.split('@')[0] || null)
+
       // time is formatted client-side (browser timezone) — server just returns raw timestamp
-      return { id: msgId, from: fromMe ? 'me' : 'them', text, time: '', timestamp: ts }
+      return { id: msgId, from: fromMe ? 'me' : 'them', text, time: '', timestamp: ts, senderName }
     }).sort((a, b) => a.timestamp - b.timestamp)
 
     return NextResponse.json(mapped)

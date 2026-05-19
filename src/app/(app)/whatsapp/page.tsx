@@ -23,6 +23,7 @@ type Msg = {
   text: string
   time: string
   timestamp: number
+  senderName?: string | null
 }
 
 function timeLabel(ts: number) {
@@ -415,6 +416,12 @@ export default function WhatsappPage() {
                           ? 'bg-green-600 text-white rounded-br-sm'
                           : 'bg-white/8 border border-white/10 text-slate-200 rounded-bl-sm',
                       )}>
+                        {/* Show sender name inside group messages */}
+                        {m.from === 'them' && selectedChat?.isGroup && m.senderName && (
+                          <p className="text-[11px] font-semibold mb-1 text-blue-400">
+                            {m.senderName}
+                          </p>
+                        )}
                         <p className="break-words whitespace-pre-wrap">{m.text}</p>
                         <p className={cn('text-[10px] mt-1', m.from === 'me' ? 'text-green-200 text-right' : 'text-slate-500')}>
                           {formatMsgTime(m.timestamp)}
