@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { Bell, Search, X, CheckCheck, Trash2, Info, CheckCircle, AlertTriangle, AlertCircle } from 'lucide-react'
 import { useAuthStore } from '@/store/auth.store'
 import { useNotificationsStore } from '@/store/notifications.store'
@@ -45,27 +45,12 @@ function timeAgo(iso: string) {
 export function Topbar() {
   const { user } = useAuthStore()
   const pathname = usePathname()
-  const router = useRouter()
   const { notifications, unreadCount, markAsRead, markAllAsRead, removeNotification, addNotification } =
     useNotificationsStore()
   const [open, setOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
+  const wasOpenRef = useRef(false)
   const autoDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // When bell opens → mark all read + schedule auto-delete after 2min
-  // When bell closes → mark all read (remove unread dot)
-  useEffect(() => {
-    markAllAsRead()
-    if (open) {
-      // Snapshot current notification ids and delete them after 2min
-      const ids = notifications.map(n => n.id)
-      if (autoDeleteTimerRef.current) clearTimeout(autoDeleteTimerRef.current)
-      autoDeleteTimerRef.current = setTimeout(() => {
-        ids.forEach(id => removeNotification(id))
-      }, 2 * 60 * 1000)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
 
   const pageTitle =
     pageTitles[pathname] ??
@@ -77,7 +62,30 @@ export function Topbar() {
     if (user?.isDemo && notifications.length === 0) {
       mockNotifications.forEach((n) => addNotification(n))
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.isDemo])
+
+  // Bell open/close behaviour — uses a ref so it never fires on mount
+  useEffect(() => {
+    const justOpened = open && !wasOpenRef.current
+    const justClosed = !open && wasOpenRef.current
+    wasOpenRef.current = open
+
+    if (justOpened) {
+      // Schedule auto-delete of currently visible notifications after 2 min
+      const ids = notifications.map(n => n.id)
+      if (autoDeleteTimerRef.current) clearTimeout(autoDeleteTimerRef.current)
+      autoDeleteTimerRef.current = setTimeout(() => {
+        ids.forEach(id => removeNotification(id))
+      }, 2 * 60 * 1000)
+    }
+
+    if (justClosed) {
+      // Mark everything as read when panel is closed — removes the badge
+      markAllAsRead()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   // Close on outside click
   useEffect(() => {
@@ -124,7 +132,9 @@ export function Topbar() {
           >
             <Bell className="w-4 h-4" />
             {unreadCount > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-500 border-2 border-[#070d1a]" />
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-blue-500 border-2 border-[#070d1a] text-white text-[9px] font-bold flex items-center justify-center px-0.5 leading-none">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
             )}
           </button>
 
@@ -135,9 +145,9 @@ export function Topbar() {
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-white">Notificações</span>
-                  {unreadCount > 0 && (
+                  {notifications.length > 0 && (
                     <span className="px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 text-xs font-medium">
-                      {unreadCount}
+                      {notifications.length}
                     </span>
                   )}
                 </div>
