@@ -39,14 +39,18 @@ export async function GET() {
         const jid = c.remoteJid!
         const isGroup = jid.endsWith('@g.us')
         const number = jid.split('@')[0]
-        // Groups: pushName holds the group subject in Evolution API;
-        // name/subject are checked first in case newer API versions populate them.
-        // For individuals: also fall back to lastMessage.pushName.
-        const name = isGroup
-          ? (c.name || c.subject || c.pushName || number)
-          : (c.pushName || c.lastMessage?.pushName || number)
 
         const lm = c.lastMessage
+
+        // For individuals: lastMessage.pushName is the *sender's* name — only use
+        // it as fallback when the last message was NOT from us (fromMe=false),
+        // otherwise it would show "Você" as the contact name.
+        const lastMsgFromMe = lm?.key?.fromMe ?? true
+        const contactNameFallback = lastMsgFromMe ? null : (lm?.pushName ?? null)
+
+        const name = isGroup
+          ? (c.name || c.subject || c.pushName || number)
+          : (c.pushName || contactNameFallback || number)
         let lastText = '...'
         if (lm?.messageType === 'conversation' || lm?.messageType === 'extendedTextMessage') {
           lastText = lm.message?.conversation || lm.message?.extendedTextMessage?.text || '...'
