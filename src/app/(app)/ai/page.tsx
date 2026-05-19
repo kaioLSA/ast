@@ -68,6 +68,12 @@ export default function AIPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
+  // Warm up the Ollama model as soon as the page opens so the first
+  // message doesn't have to wait for the 13-second cold-start load
+  useEffect(() => {
+    fetch('/api/ai/warmup').catch(() => { /* silently ignore */ })
+  }, [])
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, activeTools])

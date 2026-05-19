@@ -6,6 +6,9 @@ const OLLAMA_URL = process.env.OLLAMA_API_URL ?? 'http://localhost:11434'
 const MODEL = 'llama3.2:3b'
 const MAX_TOOL_ITERATIONS = 6
 
+// Keep model loaded in memory permanently — eliminates the 13-second cold-start
+const KEEP_ALIVE = '-1'
+
 type OllamaMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
@@ -24,17 +27,16 @@ type OllamaResponse = {
   done: boolean
 }
 
-async function ollamaChat(messages: OllamaMessage[], stream: false): Promise<OllamaResponse>
-async function ollamaChat(messages: OllamaMessage[], stream: true): Promise<Response>
-async function ollamaChat(messages: OllamaMessage[], stream: boolean) {
+async function ollamaChat(messages: OllamaMessage[]): Promise<OllamaResponse> {
   const res = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: MODEL,
       messages,
-      stream,
+      stream: false,
       tools: toolDefinitions,
+      keep_alive: KEEP_ALIVE,
       options: { temperature: 0.3, num_predict: 1024 },
     }),
   })
@@ -43,7 +45,6 @@ async function ollamaChat(messages: OllamaMessage[], stream: boolean) {
     throw new Error(`Ollama error ${res.status}: ${await res.text()}`)
   }
 
-  if (stream) return res
   return res.json() as Promise<OllamaResponse>
 }
 
@@ -97,24 +98,23 @@ Regras importantes:
   try {
     // ── Agentic tool loop ──────────────────────────────────────────────────
     for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-      const data = await ollamaChat(conversation, false)
+      const data = await ollamaChat(conversation)
       const assistantMsg = data.message
 
-      // No tool calls → this is the final text response, stream it
+      // No tool calls → stream the response we already have back to the client
       if (!assistantMsg.tool_calls?.length) {
-        const finalText = assistantMsg.content || 'Pronto!'
-
-        // If tools were used, we already have the content. Fake-stream it.
+        const finalText = assistantMsg.content?.trim() || 'Pronto!'
         const encoder = new TextEncoder()
+
         const stream = new ReadableStream({
           start(controller) {
-            // Emit tools metadata as first line (JSON), then text
+            // Emit tools metadata as first line (JSON) so the UI can show badges
             if (toolsUsed.length) {
               const meta = JSON.stringify({ _tools: toolsUsed }) + '\n'
               controller.enqueue(encoder.encode(meta))
             }
 
-            // Word-by-word streaming for natural feel
+            // Word-by-word streaming for a natural typing feel
             const words = finalText.split(/(\s+)/)
             let idx = 0
 
@@ -135,6 +135,7 @@ Regras importantes:
             'Content-Type': 'text/plain; charset=utf-8',
             'Transfer-Encoding': 'chunked',
             'X-Accel-Buffering': 'no',
+            'Cache-Control': 'no-cache',
           },
         })
       }
