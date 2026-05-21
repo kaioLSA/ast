@@ -38,10 +38,12 @@ export function AuthContextProvider({ children }: { children: ReactNode }) {
   const setExitTrigger = (fn: (cb: () => void) => void) => { exitTriggerRef.current = fn }
 
   const navigateWithAnimation = (destination: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const go = () => router.push(destination as any)
     if (exitTriggerRef.current) {
-      exitTriggerRef.current(() => router.push(destination))
+      exitTriggerRef.current(go)
     } else {
-      router.push(destination)
+      go()
     }
   }
 

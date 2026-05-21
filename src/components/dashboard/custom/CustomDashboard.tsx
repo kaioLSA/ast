@@ -70,14 +70,6 @@ export function CustomDashboard({ dashboard, onDelete }: Props) {
     ])
   }
 
-  const saveName = async () => {
-    if (!name.trim()) return
-    await fetch(`/api/dashboards/${dashboard.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim() }),
-    })
-    setEditingName(false)
-  }
-
   return (
     <div className="space-y-4">
       {/* Toolbar */}

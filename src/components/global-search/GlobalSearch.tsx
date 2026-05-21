@@ -197,7 +197,8 @@ export function GlobalSearch({ open, onClose }: Props) {
 
   /* ── Navigate ────────────────────────────────────────────────────── */
   const go = useCallback((item: FlatResult) => {
-    router.push(item.href)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    router.push(item.href as any)
     onClose()
   }, [router, onClose])
 
