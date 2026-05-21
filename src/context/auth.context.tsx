@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useState, useRef, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/auth.store'
 import { routes } from '@/config/routes'
@@ -15,6 +15,8 @@ interface AuthContextValue {
   requiresPasswordChange: boolean
   changePasswordError: string | null
   isChangingPassword: boolean
+  /** Set by LoginPageClient so auth context can trigger the exit animation */
+  setExitTrigger: (fn: (cb: () => void) => void) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -30,6 +32,18 @@ export function AuthContextProvider({ children }: { children: ReactNode }) {
   const [changeToken, setChangeToken] = useState<string | null>(null)
   const [isChangingPassword, setIsChangingPassword] = useState(false)
   const [changePasswordError, setChangePasswordError] = useState<string | null>(null)
+
+  // Exit animation trigger — set by LoginPageClient
+  const exitTriggerRef = useRef<((cb: () => void) => void) | null>(null)
+  const setExitTrigger = (fn: (cb: () => void) => void) => { exitTriggerRef.current = fn }
+
+  const navigateWithAnimation = (destination: string) => {
+    if (exitTriggerRef.current) {
+      exitTriggerRef.current(() => router.push(destination))
+    } else {
+      router.push(destination)
+    }
+  }
 
   const login = async (credentials: LoginCredentials) => {
     setIsLoggingIn(true)
@@ -55,7 +69,7 @@ export function AuthContextProvider({ children }: { children: ReactNode }) {
 
       // ── Normal login ─────────────────────────────────────────────────────
       setSession(json.data)
-      router.push(routes.dashboard)
+      navigateWithAnimation(routes.dashboard)
     } catch {
       setLoginError('Erro de conexão. Tente novamente.')
     } finally {
@@ -82,7 +96,7 @@ export function AuthContextProvider({ children }: { children: ReactNode }) {
       setRequiresPasswordChange(false)
       setChangeToken(null)
       setSession(json.data)
-      router.push(routes.dashboard)
+      navigateWithAnimation(routes.dashboard)
     } catch {
       setChangePasswordError('Erro de conexão. Tente novamente.')
     } finally {
@@ -108,6 +122,7 @@ export function AuthContextProvider({ children }: { children: ReactNode }) {
       requiresPasswordChange,
       changePasswordError,
       isChangingPassword,
+      setExitTrigger,
     }}>
       {children}
     </AuthContext.Provider>

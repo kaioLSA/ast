@@ -99,9 +99,7 @@ const selectCls = `${inputCls} cursor-pointer`
 
 export default function WhatsappPage() {
   usePageTitle('WhatsApp')
-  const { setTotalUnread, clearPending, localUnread, clearChatUnread } = useWhatsAppStore()
-
-  useEffect(() => { clearPending() }, [clearPending])
+  const { setTotalUnread, localUnread, clearChatUnread } = useWhatsAppStore()
 
   // ── Chat list state ──
   const [chats, setChats] = useState<Chat[]>([])
@@ -129,7 +127,17 @@ export default function WhatsappPage() {
   const [submitError, setSubmitError] = useState('')
 
   const bottomRef = useRef<HTMLDivElement>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollRef   = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Sliding underline for tabs
+  const tabBtnRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const [underline, setUnderline] = useState({ left: 0, width: 0, ready: false })
+  const moveUnderline = useCallback(() => {
+    const el = tabBtnRefs.current[tab]
+    if (el) setUnderline({ left: el.offsetLeft, width: el.offsetWidth, ready: true })
+  }, [tab])
+  // useEffect + rAF guarantees two paint frames so CSS transition runs in both directions
+  useEffect(() => { const id = requestAnimationFrame(moveUnderline); return () => cancelAnimationFrame(id) }, [moveUnderline])
 
   // ── Context menu helpers ──────────────────────────────────────────────────
 
@@ -366,8 +374,9 @@ export default function WhatsappPage() {
   )
   const individualChats = chats.filter(c => !c.isGroup)
   const groupChats = chats.filter(c => c.isGroup)
-  const individualUnread = individualChats.reduce((s, c) => s + (c.unread || 0), 0)
-  const groupUnread = groupChats.reduce((s, c) => s + (c.unread || 0), 0)
+  // Use localUnread (tracked in-session) — Evolution API's unread field is unreliable
+  const individualUnread = individualChats.reduce((s, c) => s + (localUnread[c.id] ?? 0), 0)
+  const groupUnread = groupChats.reduce((s, c) => s + (localUnread[c.id] ?? 0), 0)
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -394,29 +403,40 @@ export default function WhatsappPage() {
         <div className="w-80 shrink-0 border-r border-white/10 flex flex-col">
 
           {/* Tabs */}
-          <div className="flex border-b border-white/10">
+          <div className="relative flex border-b border-white/10">
+            {/* Sliding underline */}
+            {underline.ready && (
+              <span
+                className="absolute bottom-0 h-0.5 bg-blue-500 rounded-t-full pointer-events-none"
+                style={{
+                  left: underline.left,
+                  width: underline.width,
+                  transition: 'left 0.22s cubic-bezier(0.4,0,0.2,1), width 0.22s cubic-bezier(0.4,0,0.2,1)',
+                }}
+              />
+            )}
             {(['chats', 'groups'] as const).map(t => (
               <button
                 key={t}
+                ref={el => { tabBtnRefs.current[t] = el }}
                 onClick={() => { setTab(t); setSelectedId(null) }}
                 className={cn(
-                  'flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold transition-colors relative',
+                  'flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-semibold transition-colors',
                   tab === t ? 'text-white' : 'text-slate-500 hover:text-slate-300',
                 )}
               >
                 {t === 'chats' ? <MessageCircle className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
                 {t === 'chats' ? 'Conversas' : 'Grupos'}
                 {t === 'chats' && individualUnread > 0 && (
-                  <span className="min-w-[16px] h-4 rounded-full bg-green-500 text-white text-[9px] flex items-center justify-center font-bold px-1">
+                  <span className="min-w-[16px] h-4 rounded-full bg-blue-500 text-white text-[9px] flex items-center justify-center font-bold px-1">
                     {individualUnread > 9 ? '9+' : individualUnread}
                   </span>
                 )}
                 {t === 'groups' && groupUnread > 0 && (
-                  <span className="min-w-[16px] h-4 rounded-full bg-green-500 text-white text-[9px] flex items-center justify-center font-bold px-1">
+                  <span className="min-w-[16px] h-4 rounded-full bg-blue-500 text-white text-[9px] flex items-center justify-center font-bold px-1">
                     {groupUnread > 9 ? '9+' : groupUnread}
                   </span>
                 )}
-                {tab === t && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t-full" />}
               </button>
             ))}
           </div>
@@ -493,7 +513,7 @@ export default function WhatsappPage() {
                     {/* Badge + three-dot */}
                     <div className="flex items-center gap-1 shrink-0">
                       {count > 0 && (
-                        <span className="min-w-[18px] h-[18px] rounded-full bg-green-500 text-white text-[10px] flex items-center justify-center font-bold px-1">
+                        <span className="min-w-[18px] h-[18px] rounded-full bg-blue-500 text-white text-[10px] flex items-center justify-center font-bold px-1">
                           {badgeLabel}
                         </span>
                       )}
@@ -607,7 +627,7 @@ export default function WhatsappPage() {
       {/* ── Context menu ── */}
       {ctxMenu && (
         <div
-          className="fixed z-50 bg-[#0d1526] border border-white/12 rounded-xl shadow-2xl py-1.5 w-52 overflow-hidden"
+          className="fixed z-50 bg-[#1c1c24] border border-white/12 rounded-xl shadow-2xl py-1.5 w-52 overflow-hidden"
           style={{ top: ctxMenu.y, left: ctxMenu.x }}
           onClick={e => e.stopPropagation()}
         >
@@ -661,7 +681,7 @@ export default function WhatsappPage() {
       {activeModal && modalChat && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={closeModal}>
           <div
-            className="relative bg-[#0a1020] border border-white/10 rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] flex flex-col"
+            className="relative bg-[#14141b] border border-white/10 rounded-2xl shadow-2xl w-full max-w-md max-h-[88vh] flex flex-col"
             onClick={e => e.stopPropagation()}
           >
             {/* Modal header */}

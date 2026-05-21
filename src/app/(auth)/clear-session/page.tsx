@@ -18,7 +18,7 @@ export default function ClearSessionPage() {
   }, [])
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#04070f]">
+    <div className="min-h-screen flex items-center justify-center bg-[#0b0b0f]">
       <p className="text-slate-400 text-sm">Limpando sessão...</p>
     </div>
   )

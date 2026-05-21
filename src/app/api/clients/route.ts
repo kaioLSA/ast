@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
     avatar: body.avatar ?? '',
     gradient: body.gradient ?? 'from-blue-500 to-cyan-500',
     since: body.since ?? '',
+    state: body.state ?? '',
   }
 
   const res = await fetch(`${SUPABASE_URL}/rest/v1/clients`, {

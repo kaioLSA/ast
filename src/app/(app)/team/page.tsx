@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { usePageTitle } from '@/hooks/usePageTitle'
 import { useAuthStore } from '@/store/auth.store'
@@ -9,6 +9,7 @@ import {
   Plus, Mail, X, CheckCircle2, Shield, User, Users, Eye, EyeOff,
   Building2, Calendar, DollarSign, BarChart3, MessageCircle,
   FileText, Target, Settings, Zap, Trash2, ChevronDown, ChevronUp, ShieldCheck, KeyRound, AlertTriangle, Lock,
+  Camera, Pencil, Loader2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
@@ -23,6 +24,7 @@ type Member = {
   permissions: string[]
   active: boolean
   created_at: string
+  avatar_url?: string | null
 }
 
 // ─── Permissions definition ───────────────────────────────────────────────────
@@ -136,11 +138,36 @@ function getInitials(name: string) {
 function Modal({ open, onClose, title, wide, children }: {
   open: boolean; onClose: () => void; title: string; wide?: boolean; children: React.ReactNode
 }) {
-  if (!open || typeof document === 'undefined') return null
+  const [mounted, setMounted] = useState(false)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
+    } else {
+      setVisible(false)
+      const t = setTimeout(() => setMounted(false), 200)
+      return () => clearTimeout(t)
+    }
+  }, [open])
+
+  if (!mounted || typeof document === 'undefined') return null
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={cn('relative z-10 w-full rounded-2xl border border-white/10 bg-[#0d1425] shadow-2xl', wide ? 'max-w-2xl' : 'max-w-md')}>
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        style={{ opacity: visible ? 1 : 0, transition: 'opacity 200ms ease' }}
+        onClick={onClose}
+      />
+      <div
+        className={cn('relative z-10 w-full rounded-2xl border border-white/10 bg-[#1c1c24] shadow-2xl', wide ? 'max-w-2xl' : 'max-w-md')}
+        style={{
+          opacity: visible ? 1 : 0,
+          transform: visible ? 'translateY(0) scale(1)' : 'translateY(14px) scale(0.97)',
+          transition: 'opacity 200ms ease, transform 200ms ease',
+        }}
+      >
         <div className="flex items-center justify-between p-5 border-b border-white/10">
           <h3 className="text-base font-semibold text-white">{title}</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
@@ -233,9 +260,33 @@ function PermissionGroup({
   )
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+async function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const SIZE = 256
+        const canvas = document.createElement('canvas')
+        canvas.width = SIZE; canvas.height = SIZE
+        const ctx = canvas.getContext('2d')!
+        const side = Math.min(img.width, img.height)
+        ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, SIZE, SIZE)
+        resolve(canvas.toDataURL('image/jpeg', 0.82))
+      }
+      img.onerror = reject
+      img.src = e.target?.result as string
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-// Conta que nunca pode ser excluída/desativada
+// Conta que nunca pode ser excluída/desativada ou modificada
 const PROTECTED_EMAIL = 'kaiolaurindo@setteia.com'
 
 const emptyForm = {
@@ -274,6 +325,17 @@ export default function TeamPage() {
   const [resetSaved, setResetSaved] = useState(false)
   const [resetError, setResetError] = useState('')
   const [showResetPass, setShowResetPass] = useState(false)
+
+  // ── Edit member state ──────────────────────────────────────────────────────
+  const [editMode, setEditMode]       = useState(false)
+  const [editPerms, setEditPerms]     = useState<string[]>([])
+  const [editRole, setEditRole]       = useState<'admin' | 'custom'>('custom')
+  const [editCustomRole, setEditCustomRole] = useState('')
+  const [editAvatar, setEditAvatar]   = useState<string | null>(null)
+  const [editSaving, setEditSaving]   = useState(false)
+  const [editSaved, setEditSaved]     = useState(false)
+  const [editError, setEditError]     = useState('')
+  const editFileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch('/api/team')
@@ -383,6 +445,58 @@ export default function TeamPage() {
     }
   }
 
+  const openEdit = useCallback((m: Member) => {
+    setEditMode(true)
+    setEditPerms(m.permissions ?? [])
+    setEditRole(m.role === 'admin' ? 'admin' : 'custom')
+    setEditCustomRole(m.custom_role ?? '')
+    setEditAvatar(m.avatar_url ?? null)
+    setEditSaving(false)
+    setEditSaved(false)
+    setEditError('')
+  }, [])
+
+  const handleEditSave = async () => {
+    if (!viewMember) return
+    setEditSaving(true)
+    setEditError('')
+    try {
+      const patch: Record<string, unknown> = {
+        role: editRole === 'admin' ? 'admin' : 'agent',
+        custom_role: editCustomRole,
+        permissions: editRole === 'admin' ? ALL_PERMISSIONS : editPerms,
+      }
+      // Only send avatar if changed
+      if (editAvatar !== viewMember.avatar_url) patch.avatar_url = editAvatar
+
+      const res = await fetch(`/api/team/${viewMember.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      const data = await res.json()
+      if (!res.ok) { setEditError(data.error ?? 'Erro ao salvar'); setEditSaving(false); return }
+
+      // Update local list
+      setMembers(prev => prev.map(m => m.id === viewMember.id
+        ? { ...m, ...patch, avatar_url: editAvatar, permissions: patch.permissions as string[] }
+        : m
+      ))
+      setViewMember(prev => prev ? { ...prev, ...patch, avatar_url: editAvatar, permissions: patch.permissions as string[] } : prev)
+
+      setEditSaved(true)
+      setTimeout(() => { setEditMode(false); setEditSaved(false); setEditSaving(false) }, 1000)
+    } catch {
+      setEditError('Erro de conexão')
+      setEditSaving(false)
+    }
+  }
+
+  const handleEditFile = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) return
+    try { setEditAvatar(await compressImage(file)) } catch { /* ignore */ }
+  }, [])
+
   const activeMembers = members.filter(m => m.active)
   const adminCount = activeMembers.filter(m => m.role === 'admin').length
 
@@ -454,8 +568,11 @@ export default function TeamPage() {
               <div key={m.id} className="rounded-2xl border border-white/8 bg-white/3 p-5 hover:border-white/15 transition-all group">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className={cn('w-11 h-11 rounded-xl bg-gradient-to-br flex items-center justify-center text-sm font-bold text-white shrink-0', getGradient(m.name))}>
-                      {getInitials(m.name)}
+                    <div className={cn('w-11 h-11 rounded-xl overflow-hidden flex items-center justify-center text-sm font-bold text-white shrink-0', !m.avatar_url && `bg-gradient-to-br ${getGradient(m.name)}`)}>
+                      {m.avatar_url
+                        ? <img src={m.avatar_url} alt={m.name} className="w-full h-full object-cover" />
+                        : getInitials(m.name)
+                      }
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-white flex items-center gap-1.5">
@@ -530,19 +647,40 @@ export default function TeamPage() {
         </div>
       )}
 
+      {/* ─── Hidden file input for edit avatar ─── */}
+      <input
+        ref={editFileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleEditFile(f); e.target.value = '' }}
+      />
+
       {/* ─── View Member Modal ─── */}
-      <Modal open={!!viewMember} onClose={() => setViewMember(null)} title="Detalhes do Membro" wide>
-        {viewMember && (
+      <Modal
+        open={!!viewMember}
+        onClose={() => { setViewMember(null); setEditMode(false) }}
+        title={editMode ? 'Editar Membro' : 'Detalhes do Membro'}
+        wide
+      >
+        {viewMember && !editMode && (
           <div className="space-y-5">
+            {/* Header */}
             <div className="flex items-center gap-4">
-              <div className={cn('w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center text-lg font-bold text-white shrink-0', getGradient(viewMember.name))}>
-                {getInitials(viewMember.name)}
+              <div className={cn(
+                'w-14 h-14 rounded-2xl overflow-hidden flex items-center justify-center text-lg font-bold text-white shrink-0',
+                !viewMember.avatar_url && `bg-gradient-to-br ${getGradient(viewMember.name)}`
+              )}>
+                {viewMember.avatar_url
+                  ? <img src={viewMember.avatar_url} alt={viewMember.name} className="w-full h-full object-cover" />
+                  : getInitials(viewMember.name)
+                }
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-base font-semibold text-white">{viewMember.name}</p>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <Mail className="w-3 h-3 text-slate-500" />
-                  <p className="text-xs text-slate-400">{viewMember.email}</p>
+                  <Mail className="w-3 h-3 text-slate-500 shrink-0" />
+                  <p className="text-xs text-slate-400 truncate">{viewMember.email}</p>
                 </div>
                 <span className={cn(
                   'inline-block mt-1.5 px-2 py-0.5 rounded-full border text-[11px] font-medium',
@@ -555,6 +693,7 @@ export default function TeamPage() {
               </div>
             </div>
 
+            {/* Permissions view */}
             <div className="border-t border-white/8 pt-4">
               <p className="text-xs font-medium text-slate-400 mb-3 uppercase tracking-wide">
                 Permissões {viewMember.role === 'admin' ? '— Acesso total' : `— ${viewMember.permissions?.length ?? 0} de ${ALL_PERMISSIONS.length}`}
@@ -585,8 +724,18 @@ export default function TeamPage() {
               </div>
             </div>
 
+            {/* Action buttons */}
             {isAdmin && viewMember.id !== me?.id && (
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2 pt-1 flex-wrap">
+                {/* Edit button — hidden for protected account */}
+                {viewMember.email?.toLowerCase() !== PROTECTED_EMAIL.toLowerCase() && (
+                  <button
+                    onClick={() => openEdit(viewMember)}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-400 text-sm font-medium hover:bg-blue-500/20 transition-colors"
+                  >
+                    <Pencil className="w-4 h-4" /> Editar
+                  </button>
+                )}
                 <button
                   onClick={() => { setViewMember(null); openResetModal(viewMember) }}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400 text-sm font-medium hover:bg-amber-500/20 transition-colors"
@@ -607,6 +756,157 @@ export default function TeamPage() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Edit mode panel ── */}
+        {viewMember && editMode && (
+          <div className="space-y-5">
+            {/* Avatar upload */}
+            <div className="flex flex-col items-center gap-3">
+              <div
+                className="relative group cursor-pointer"
+                onClick={() => editFileRef.current?.click()}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) handleEditFile(f) }}
+              >
+                <div className={cn(
+                  'w-20 h-20 rounded-2xl overflow-hidden flex items-center justify-center text-2xl font-bold text-white shrink-0 transition-all',
+                  !editAvatar && `bg-gradient-to-br ${getGradient(viewMember.name)}`
+                )}>
+                  {editAvatar
+                    ? <img src={editAvatar} alt={viewMember.name} className="w-full h-full object-cover" />
+                    : getInitials(viewMember.name)
+                  }
+                </div>
+                <div className="absolute inset-0 rounded-2xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Camera className="w-6 h-6 text-white" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => editFileRef.current?.click()}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-white/8 border border-white/10 text-slate-300 hover:text-white hover:bg-white/12 transition-colors"
+                >
+                  {editAvatar ? 'Trocar foto' : 'Adicionar foto'}
+                </button>
+                {editAvatar && (
+                  <button
+                    type="button"
+                    onClick={() => setEditAvatar(null)}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-colors"
+                  >
+                    Remover
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Role selector */}
+            <div>
+              <label className="text-xs text-slate-400 mb-2 block">Tipo de acesso</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditRole('admin')}
+                  className={cn(
+                    'flex items-center gap-3 p-3 rounded-xl border transition-all text-left',
+                    editRole === 'admin' ? 'border-violet-500/40 bg-violet-500/10' : 'border-white/10 bg-white/3 hover:border-white/20'
+                  )}
+                >
+                  <ShieldCheck className={cn('w-5 h-5 shrink-0', editRole === 'admin' ? 'text-violet-400' : 'text-slate-500')} />
+                  <div>
+                    <p className={cn('text-sm font-medium', editRole === 'admin' ? 'text-violet-300' : 'text-slate-300')}>Administrador</p>
+                    <p className="text-[11px] text-slate-500">Acesso total</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditRole('custom')}
+                  className={cn(
+                    'flex items-center gap-3 p-3 rounded-xl border transition-all text-left',
+                    editRole === 'custom' ? 'border-blue-500/40 bg-blue-500/10' : 'border-white/10 bg-white/3 hover:border-white/20'
+                  )}
+                >
+                  <User className={cn('w-5 h-5 shrink-0', editRole === 'custom' ? 'text-blue-400' : 'text-slate-500')} />
+                  <div>
+                    <p className={cn('text-sm font-medium', editRole === 'custom' ? 'text-blue-300' : 'text-slate-300')}>Personalizado</p>
+                    <p className="text-[11px] text-slate-500">Permissões manuais</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Custom role label */}
+            <div>
+              <label className="text-xs text-slate-400 mb-1.5 block">Cargo / Função</label>
+              <input
+                placeholder="Ex: Vendedor, SDR, Analista..."
+                value={editCustomRole}
+                onChange={e => setEditCustomRole(e.target.value)}
+                className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/60 transition-colors"
+              />
+            </div>
+
+            {/* Permissions */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs text-slate-400 uppercase tracking-wide font-medium">
+                  {editRole === 'admin' ? 'Permissões — todas ativadas' : `Permissões — ${editPerms.length} de ${ALL_PERMISSIONS.length}`}
+                </label>
+                {editRole === 'custom' && (
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setEditPerms(ALL_PERMISSIONS)} className="text-[10px] text-blue-400 hover:text-blue-300 transition-colors">Selecionar tudo</button>
+                    <span className="text-slate-700">·</span>
+                    <button type="button" onClick={() => setEditPerms([])} className="text-[10px] text-slate-500 hover:text-slate-300 transition-colors">Limpar</button>
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {PERMISSION_GROUPS.map(group => (
+                  <PermissionGroup
+                    key={group.key}
+                    group={group}
+                    selected={editRole === 'admin' ? ALL_PERMISSIONS : editPerms}
+                    onChange={(key, checked) => setEditPerms(prev => checked ? [...prev, key] : prev.filter(k => k !== key))}
+                    disabled={editRole === 'admin'}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {editError && (
+              <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{editError}</p>
+            )}
+
+            {/* Save / Cancel */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setEditMode(false)}
+                disabled={editSaving}
+                className="flex-1 h-10 rounded-xl border border-white/10 bg-white/5 text-slate-300 text-sm font-medium hover:bg-white/8 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleEditSave}
+                disabled={editSaving}
+                className={cn(
+                  'flex-1 h-10 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2',
+                  editSaved ? 'bg-emerald-600 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50'
+                )}
+              >
+                {editSaved
+                  ? <><CheckCircle2 className="w-4 h-4" /> Salvo!</>
+                  : editSaving
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
+                    : <><CheckCircle2 className="w-4 h-4" /> Salvar alterações</>
+                }
+              </button>
+            </div>
           </div>
         )}
       </Modal>

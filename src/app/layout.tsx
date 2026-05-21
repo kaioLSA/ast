@@ -9,6 +9,7 @@ import { AnimationProvider } from '@/providers/AnimationProvider'
 import { AuthContextProvider } from '@/context/auth.context'
 import { SidebarProvider } from '@/context/sidebar.context'
 import { NotificationProvider } from '@/context/notification.context'
+import { SplashProvider } from '@/components/providers/SplashProvider'
 import { siteConfig } from '@/config/site'
 import './globals.css'
 
@@ -39,7 +40,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <NotificationProvider>
                     <SidebarProvider>
                       <AnimationProvider>
-                        {children}
+                        <SplashProvider>
+                          {children}
+                        </SplashProvider>
                         <Toaster richColors position="top-right" />
                       </AnimationProvider>
                     </SidebarProvider>

@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
     value: body.value ?? 0,
     score: body.score ?? 70,
     notes: body.notes ?? '',
+    state: body.state ?? '',
   }
 
   const res = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {

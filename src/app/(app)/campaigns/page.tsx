@@ -55,7 +55,7 @@ function Modal({ open, onClose, title, wide, children }: { open: boolean; onClos
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={cn('relative z-10 w-full rounded-2xl border border-white/10 bg-[#0d1425] shadow-2xl', wide ? 'max-w-2xl' : 'max-w-lg')}>
+      <div className={cn('relative z-10 w-full rounded-2xl border border-white/10 bg-[#1c1c24] shadow-2xl', wide ? 'max-w-2xl' : 'max-w-lg')}>
         <div className="flex items-center justify-between p-5 border-b border-white/10">
           <h3 className="text-base font-semibold text-white">{title}</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"><X className="w-4 h-4" /></button>
@@ -207,14 +207,14 @@ export default function CampaignsPage() {
             <label className="text-xs text-slate-400 mb-1.5 block">Plataforma</label>
             <select value={createForm.platform} onChange={e => setCreateForm(p => ({ ...p, platform: e.target.value }))}
               className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white focus:outline-none focus:border-blue-500/60 transition-colors">
-              {platforms.map(pl => <option key={pl} value={pl} className="bg-[#0d1425]">{pl}</option>)}
+              {platforms.map(pl => <option key={pl} value={pl} className="bg-[#1c1c24]">{pl}</option>)}
             </select>
           </div>
           <div>
             <label className="text-xs text-slate-400 mb-1.5 block">Objetivo</label>
             <select value={createForm.objective} onChange={e => setCreateForm(p => ({ ...p, objective: e.target.value }))}
               className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white focus:outline-none focus:border-blue-500/60 transition-colors">
-              {objectives.map(o => <option key={o} value={o} className="bg-[#0d1425]">{o}</option>)}
+              {objectives.map(o => <option key={o} value={o} className="bg-[#1c1c24]">{o}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">

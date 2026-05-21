@@ -12,6 +12,40 @@ function supabaseHeaders() {
   }
 }
 
+export async function PATCH(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  const user = await getAuthUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = params
+  const body = await request.json().catch(() => ({}))
+
+  const allowed = ['name', 'company_name', 'email', 'phone', 'status', 'value', 'deals', 'score', 'since', 'state']
+  const patch: Record<string, unknown> = {}
+  for (const key of allowed) {
+    if (key in body) patch[key] = body[key]
+  }
+
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/clients?id=eq.${id}&company_id=eq.${user.company_id}`,
+    {
+      method: 'PATCH',
+      headers: { ...supabaseHeaders(), Prefer: 'return=representation' },
+      body: JSON.stringify(patch),
+    }
+  )
+
+  if (!res.ok) {
+    const err = await res.text()
+    return NextResponse.json({ error: err }, { status: 500 })
+  }
+
+  const data = await res.json()
+  return NextResponse.json(Array.isArray(data) ? data[0] : data)
+}
+
 export async function DELETE(
   _request: Request,
   { params }: { params: { id: string } }

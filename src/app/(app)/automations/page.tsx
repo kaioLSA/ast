@@ -45,7 +45,7 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg rounded-2xl border border-white/10 bg-[#0d1425] shadow-2xl">
+      <div className="relative z-10 w-full max-w-lg rounded-2xl border border-white/10 bg-[#1c1c24] shadow-2xl">
         <div className="flex items-center justify-between p-5 border-b border-white/10">
           <h3 className="text-base font-semibold text-white">{title}</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"><X className="w-4 h-4" /></button>
@@ -212,7 +212,7 @@ export default function AutomationsPage() {
             <label className="text-xs text-slate-400 mb-1.5 block">Gatilho</label>
             <select value={editForm.trigger} onChange={e => setEditForm(p => ({ ...p, trigger: e.target.value }))}
               className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white focus:outline-none focus:border-blue-500/60 transition-colors">
-              {triggers.map(t => <option key={t} value={t} className="bg-[#0d1425]">{t}</option>)}
+              {triggers.map(t => <option key={t} value={t} className="bg-[#1c1c24]">{t}</option>)}
             </select>
           </div>
           <div>
@@ -243,7 +243,7 @@ export default function AutomationsPage() {
             <label className="text-xs text-slate-400 mb-1.5 block">Gatilho</label>
             <select value={createForm.trigger} onChange={e => setCreateForm(p => ({ ...p, trigger: e.target.value }))}
               className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white focus:outline-none focus:border-blue-500/60 transition-colors">
-              {triggers.map(t => <option key={t} value={t} className="bg-[#0d1425]">{t}</option>)}
+              {triggers.map(t => <option key={t} value={t} className="bg-[#1c1c24]">{t}</option>)}
             </select>
           </div>
           <div>

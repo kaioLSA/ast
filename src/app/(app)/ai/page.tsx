@@ -273,11 +273,11 @@ export default function AIPage() {
       />
 
       <div
-        className="rounded-2xl border border-white/10 overflow-hidden flex bg-[#070d1a]"
+        className="rounded-2xl border border-white/10 overflow-hidden flex bg-[#111118]"
         style={{ height: 'calc(100vh - 220px)', minHeight: 520 }}
       >
         {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-        <div className="w-64 shrink-0 border-r border-white/8 flex flex-col bg-[#060c18]">
+        <div className="w-64 shrink-0 border-r border-white/8 flex flex-col bg-[#0d0d12]">
 
           {/* Sidebar header */}
           <div className="px-3 pt-4 pb-3 border-b border-white/8">
@@ -343,7 +343,7 @@ export default function AIPage() {
         <div className="flex-1 flex flex-col min-w-0">
 
           {/* Chat header */}
-          <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/8 shrink-0 bg-[#070d1a]">
+          <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/8 shrink-0 bg-[#111118]">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500/20 to-violet-600/20 border border-white/10 flex items-center justify-center">
               <Bot className="w-4 h-4 text-blue-400" />
             </div>

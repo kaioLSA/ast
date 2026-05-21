@@ -17,8 +17,20 @@ export async function GET() {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const base = `${SUPABASE_URL}/rest/v1/crm_users`
+  const filter = `company_id=eq.${user.company_id}&order=created_at.asc`
+
+  // Try with avatar_url first; if column doesn't exist yet fall back gracefully
+  const resWithAvatar = await fetch(
+    `${base}?select=id,name,email,role,custom_role,permissions,active,created_at,avatar_url&${filter}`,
+    { headers: headers(), cache: 'no-store' }
+  )
+
+  if (resWithAvatar.ok) return NextResponse.json(await resWithAvatar.json())
+
+  // Fallback: without avatar_url (column not yet migrated)
   const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/crm_users?select=id,name,email,role,custom_role,permissions,active,created_at&company_id=eq.${user.company_id}&order=created_at.asc`,
+    `${base}?select=id,name,email,role,custom_role,permissions,active,created_at&${filter}`,
     { headers: headers(), cache: 'no-store' }
   )
 

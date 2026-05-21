@@ -86,12 +86,19 @@ export async function POST(request: NextRequest) {
     })
   }
 
+  // ── Try to fetch avatar_url separately (column may not exist yet) ──────────
+  let avatarUrl: string | null = null
+  try {
+    const avatarRows = await querySupabase(`crm_users?select=avatar_url&id=eq.${dbUser.id}&limit=1`)
+    avatarUrl = avatarRows?.[0]?.avatar_url ?? null
+  } catch { /* column doesn't exist yet — ignore */ }
+
   // ── Normal login ───────────────────────────────────────────────────────────
   const user = {
     id: dbUser.id,
     name: dbUser.name,
     email: dbUser.email,
-    avatar: null,
+    avatar: avatarUrl,
     role: dbUser.role as 'admin' | 'manager' | 'agent' | 'viewer',
     status: 'active' as const,
     permissions: dbUser.role === 'admin' ? getPermissions('admin') : (dbUser.permissions ?? getPermissions(dbUser.role)),

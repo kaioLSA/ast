@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
-import { DashboardOverview } from '@/components/dashboard/overview/DashboardOverview'
+import { DashboardWrapper } from '@/components/dashboard/DashboardWrapper'
 
 export const metadata: Metadata = { title: 'Dashboard' }
 
 export default function DashboardPage() {
-  return <DashboardOverview />
+  return <DashboardWrapper />
 }

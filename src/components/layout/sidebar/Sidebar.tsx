@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
+import { useRef, useState, useLayoutEffect, useCallback, useEffect } from 'react'
 import {
   LayoutDashboard, Users, MessageCircle,
   BarChart3, DollarSign, Calendar, FileText, Settings, UsersRound,
@@ -30,17 +31,39 @@ const navItems = [
 ]
 
 export function Sidebar() {
-  const pathname = usePathname()
+  const pathname  = usePathname()
   const { isCollapsed, toggle } = useSidebar()
   const { logout } = useAuthContext()
-  const { user } = useAuthStore()
+  const { user }  = useAuthStore()
   const { pendingCount } = useWhatsAppStore()
   const waBadge = pendingCount > 4 ? '4+' : pendingCount > 0 ? String(pendingCount) : null
+
+  /* ── Sliding pill ─────────────────────────────────────────────────────────── */
+  const navRef  = useRef<HTMLElement>(null)
+  const itemRefs = useRef<Record<string, HTMLAnchorElement | null>>({})
+  const [pill, setPill] = useState({ top: 0, height: 0, ready: false })
+
+  const movePill = useCallback(() => {
+    const active = navItems.find(item =>
+      pathname === item.href ||
+      (item.href !== '/dashboard' && pathname.startsWith(item.href))
+    )
+    if (!active) return
+    const el = itemRefs.current[active.href]
+    if (el) setPill({ top: el.offsetTop, height: el.offsetHeight, ready: true })
+  }, [pathname])
+
+  useLayoutEffect(() => { movePill() }, [movePill])
+
+  // Re-measure when sidebar collapses/expands (item height/position may shift)
+  useEffect(() => {
+    requestAnimationFrame(movePill)
+  }, [isCollapsed, movePill])
 
   return (
     <aside
       className={cn(
-        'relative flex flex-col h-screen border-r border-white/8 bg-[#070d1a] transition-all duration-300 shrink-0',
+        'relative flex flex-col h-screen border-r border-white/8 bg-[#111118] transition-all duration-300 shrink-0',
         isCollapsed ? 'w-[68px]' : 'w-60',
       )}
     >
@@ -57,39 +80,65 @@ export function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-0.5">
+      <nav ref={navRef} className="relative flex-1 overflow-y-auto py-4 px-2">
+
+        {/* Sliding pill */}
+        {pill.ready && (
+          <div
+            className="absolute rounded-xl bg-white shadow-sm pointer-events-none z-0"
+            style={{
+              top:    pill.top,
+              height: pill.height,
+              left:   isCollapsed ? '50%' : 4,
+              width:  isCollapsed ? 40 : 'calc(100% - 8px)',
+              transform: isCollapsed ? 'translateX(-50%)' : 'none',
+              transition: [
+                'top 0.22s cubic-bezier(0.4,0,0.2,1)',
+                'height 0.22s cubic-bezier(0.4,0,0.2,1)',
+                'left 0.3s cubic-bezier(0.4,0,0.2,1)',
+                'width 0.3s cubic-bezier(0.4,0,0.2,1)',
+              ].join(', '),
+            }}
+          />
+        )}
+
         {navItems.map(({ label, href, icon: Icon }) => {
-          const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href + '/'))
-          const isWA = href === routes.whatsapp
-          const badge = isWA ? waBadge : null
+          const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+          const isWA    = href === routes.whatsapp
+          const badge   = isWA ? waBadge : null
           return (
             <Link
               key={href}
               href={href}
+              ref={el => { itemRefs.current[href] = el }}
               title={isCollapsed ? label : undefined}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group',
+                'relative z-10 flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors duration-150 group',
                 isActive
-                  ? 'bg-blue-500/15 text-blue-400 border border-blue-500/25'
-                  : 'text-slate-500 hover:text-slate-200 hover:bg-white/5 border border-transparent',
+                  ? 'text-gray-900'
+                  : 'text-slate-500 hover:text-slate-200 hover:bg-white/5',
                 isCollapsed && 'justify-center px-0 w-10 mx-auto',
               )}
             >
-              {/* Icon — with dot badge when collapsed */}
+              {/* Icon */}
               <span className="relative shrink-0">
-                <Icon className={cn('w-[18px] h-[18px]', isActive ? 'text-blue-400' : 'text-slate-500 group-hover:text-slate-300')} />
+                <Icon className={cn(
+                  'w-[18px] h-[18px]',
+                  isActive ? 'text-gray-900' : 'text-slate-500 group-hover:text-slate-300',
+                )} />
                 {badge && isCollapsed && (
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] rounded-full bg-green-500 text-white text-[9px] font-bold flex items-center justify-center px-0.5 leading-none">
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center px-0.5 leading-none">
                     {badge}
                   </span>
                 )}
               </span>
-              {/* Label + badge when expanded */}
+
+              {/* Label + badge */}
               {!isCollapsed && (
                 <>
                   <span className="truncate flex-1">{label}</span>
                   {badge && (
-                    <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-green-500 text-white text-[10px] font-bold flex items-center justify-center px-1 leading-none shrink-0">
+                    <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-blue-500 text-white text-[10px] font-bold flex items-center justify-center px-1 leading-none shrink-0">
                       {badge}
                     </span>
                   )}
@@ -129,7 +178,7 @@ export function Sidebar() {
       {/* Toggle */}
       <button
         onClick={toggle}
-        className="absolute -right-3 top-[72px] flex items-center justify-center w-6 h-6 rounded-full bg-[#0d1425] border border-white/15 hover:border-blue-500/40 hover:text-blue-400 text-slate-500 transition-all z-20"
+        className="absolute -right-3 top-[72px] flex items-center justify-center w-6 h-6 rounded-full bg-[#1c1c24] border border-white/15 hover:border-blue-500/40 hover:text-blue-400 text-slate-500 transition-all z-20"
       >
         {isCollapsed
           ? <ChevronRight className="w-3 h-3" />

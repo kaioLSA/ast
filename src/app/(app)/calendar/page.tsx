@@ -36,11 +36,36 @@ function getDaysInMonth(y: number, m: number) { return new Date(y, m + 1, 0).get
 function getFirstDay(y: number, m: number) { return new Date(y, m, 1).getDay() }
 
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
-  if (!open || typeof document === 'undefined') return null
+  const [mounted, setMounted] = useState(false)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
+    } else {
+      setVisible(false)
+      const t = setTimeout(() => setMounted(false), 200)
+      return () => clearTimeout(t)
+    }
+  }, [open])
+
+  if (!mounted || typeof document === 'undefined') return null
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-[#0d1425] shadow-2xl">
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        style={{ opacity: visible ? 1 : 0, transition: 'opacity 200ms ease' }}
+        onClick={onClose}
+      />
+      <div
+        className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-[#1c1c24] shadow-2xl"
+        style={{
+          opacity: visible ? 1 : 0,
+          transform: visible ? 'translateY(0) scale(1)' : 'translateY(14px) scale(0.97)',
+          transition: 'opacity 200ms ease, transform 200ms ease',
+        }}
+      >
         <div className="flex items-center justify-between p-5 border-b border-white/10">
           <h3 className="text-base font-semibold text-white">{title}</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"><X className="w-4 h-4" /></button>
@@ -284,14 +309,14 @@ export default function CalendarPage() {
               <label className="text-xs text-slate-400 mb-1.5 block">Mês</label>
               <select value={form.month} onChange={e => setForm(p => ({ ...p, month: e.target.value }))}
                 className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-2 text-sm text-white focus:outline-none focus:border-blue-500/60 transition-colors">
-                {MONTHS.map((m, i) => <option key={i} value={i} className="bg-[#0d1425]">{m.slice(0, 3)}</option>)}
+                {MONTHS.map((m, i) => <option key={i} value={i} className="bg-[#1c1c24]">{m.slice(0, 3)}</option>)}
               </select>
             </div>
             <div>
               <label className="text-xs text-slate-400 mb-1.5 block">Ano</label>
               <select value={form.year} onChange={e => setForm(p => ({ ...p, year: e.target.value }))}
                 className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-2 text-sm text-white focus:outline-none focus:border-blue-500/60 transition-colors">
-                {[2025, 2026, 2027].map(y => <option key={y} value={y} className="bg-[#0d1425]">{y}</option>)}
+                {[2025, 2026, 2027].map(y => <option key={y} value={y} className="bg-[#1c1c24]">{y}</option>)}
               </select>
             </div>
           </div>

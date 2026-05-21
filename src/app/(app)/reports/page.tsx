@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { usePageTitle } from '@/hooks/usePageTitle'
 import { useAuthStore } from '@/store/auth.store'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
@@ -20,18 +21,44 @@ const reportTypes = ['Pipeline de Vendas', 'Performance de Campanhas', 'Análise
 const formats = ['PDF', 'XLSX', 'CSV']
 
 function Modal({ open, onClose, title, wide, children }: { open: boolean; onClose: () => void; title: string; wide?: boolean; children: React.ReactNode }) {
-  if (!open) return null
-  return (
+  const [mounted, setMounted] = useState(false)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
+    } else {
+      setVisible(false)
+      const t = setTimeout(() => setMounted(false), 200)
+      return () => clearTimeout(t)
+    }
+  }, [open])
+
+  if (!mounted || typeof document === 'undefined') return null
+  return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={cn('relative z-10 w-full rounded-2xl border border-white/10 bg-[#0d1425] shadow-2xl', wide ? 'max-w-lg' : 'max-w-md')}>
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        style={{ opacity: visible ? 1 : 0, transition: 'opacity 200ms ease' }}
+        onClick={onClose}
+      />
+      <div
+        className={cn('relative z-10 w-full rounded-2xl border border-white/10 bg-[#1c1c24] shadow-2xl', wide ? 'max-w-lg' : 'max-w-md')}
+        style={{
+          opacity: visible ? 1 : 0,
+          transform: visible ? 'translateY(0) scale(1)' : 'translateY(14px) scale(0.97)',
+          transition: 'opacity 200ms ease, transform 200ms ease',
+        }}
+      >
         <div className="flex items-center justify-between p-5 border-b border-white/10">
           <h3 className="text-base font-semibold text-white">{title}</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"><X className="w-4 h-4" /></button>
         </div>
         <div className="p-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -151,7 +178,7 @@ export default function ReportsPage() {
             <label className="text-xs text-slate-400 mb-1.5 block">Tipo de relatório</label>
             <select value={genForm.type} onChange={e => setGenForm(p => ({ ...p, type: e.target.value }))}
               className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white focus:outline-none focus:border-blue-500/60 transition-colors">
-              {reportTypes.map(t => <option key={t} value={t} className="bg-[#0d1425]">{t}</option>)}
+              {reportTypes.map(t => <option key={t} value={t} className="bg-[#1c1c24]">{t}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -159,7 +186,7 @@ export default function ReportsPage() {
               <label className="text-xs text-slate-400 mb-1.5 block">Formato</label>
               <select value={genForm.format} onChange={e => setGenForm(p => ({ ...p, format: e.target.value }))}
                 className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white focus:outline-none focus:border-blue-500/60 transition-colors">
-                {formats.map(f => <option key={f} value={f} className="bg-[#0d1425]">{f}</option>)}
+                {formats.map(f => <option key={f} value={f} className="bg-[#1c1c24]">{f}</option>)}
               </select>
             </div>
             <div>

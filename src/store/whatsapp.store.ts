@@ -29,8 +29,12 @@ export const useWhatsAppStore = create<WhatsAppStore>((set) => ({
     set((s) => ({ localUnread: { ...s.localUnread, [chatId]: (s.localUnread[chatId] ?? 0) + 1 } })),
   clearChatUnread: (chatId) =>
     set((s) => {
+      const chatCount = s.localUnread[chatId] ?? 0
       const next = { ...s.localUnread }
       delete next[chatId]
-      return { localUnread: next }
+      return {
+        localUnread: next,
+        pendingCount: Math.max(0, s.pendingCount - chatCount),
+      }
     }),
 }))

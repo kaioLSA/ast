@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { usePageTitle } from '@/hooks/usePageTitle'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import { Button } from '@/components/ui/button'
-import { User, Bell, Plug, Shield, CreditCard, Check, X } from 'lucide-react'
+import { User, Bell, Plug, Shield, CreditCard, Check, X, Camera, Trash2, CheckCircle2, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { useAuthStore } from '@/store/auth.store'
 
@@ -35,49 +35,201 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
   )
 }
 
-function ProfileTab() {
-  const { user } = useAuthStore()
-  const [form, setForm] = useState({
-    name: user?.name ?? '',
-    email: user?.email ?? '',
-    role: user?.role === 'admin' ? 'Administrador' : user?.role === 'manager' ? 'Gerente' : 'Agente',
-    company: 'Startsette',
-    phone: '',
-    bio: '',
+/** Resize + compress image to max 256×256 JPEG ~80% quality → data URL */
+async function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const SIZE = 256
+        const canvas = document.createElement('canvas')
+        canvas.width = SIZE
+        canvas.height = SIZE
+        const ctx = canvas.getContext('2d')!
+        // Center-crop to square
+        const side = Math.min(img.width, img.height)
+        const sx = (img.width  - side) / 2
+        const sy = (img.height - side) / 2
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, SIZE, SIZE)
+        resolve(canvas.toDataURL('image/jpeg', 0.82))
+      }
+      img.onerror = reject
+      img.src = e.target?.result as string
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
   })
+}
+
+function ProfileTab() {
+  const { user, setUser } = useAuthStore()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [form, setForm] = useState({
+    name:  user?.name  ?? '',
+    email: user?.email ?? '',
+  })
+  const [preview,  setPreview]  = useState<string | null>(user?.avatar ?? null)
+  const [removed,  setRemoved]  = useState(false)   // user clicked "remove photo"
+  const [saving,   setSaving]   = useState(false)
+  const [saved,    setSaved]    = useState(false)
+  const [error,    setError]    = useState<string | null>(null)
+
+  const handleFile = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) return
+    try {
+      const dataUrl = await compressImage(file)
+      setPreview(dataUrl)
+      setRemoved(false)
+    } catch { /* ignore */ }
+  }, [])
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files[0]
+    if (file) handleFile(file)
+  }
+
+  const handleRemove = () => {
+    setPreview(null)
+    setRemoved(true)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      const patch: Record<string, unknown> = { name: form.name }
+      if (removed)         patch.avatar_url = null
+      else if (preview && preview !== user?.avatar) patch.avatar_url = preview
+
+      const res = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      if (!res.ok) throw new Error(await res.text())
+
+      // Update Zustand store so the Topbar refreshes immediately
+      setUser({ ...user!, name: form.name, avatar: removed ? undefined : (preview ?? user?.avatar) })
+
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2200)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Erro ao salvar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const initial = (form.name || user?.name || 'U').charAt(0).toUpperCase()
 
   return (
-    <div className="space-y-5 max-w-lg">
-      <div className="grid grid-cols-2 gap-4">
-        {(['name', 'role', 'company', 'phone'] as const).map(field => (
-          <div key={field}>
-            <label className="text-xs text-slate-400 mb-1 block capitalize">{field === 'name' ? 'Nome' : field === 'role' ? 'Cargo' : field === 'company' ? 'Empresa' : 'Telefone'}</label>
-            <input
-              value={form[field]}
-              onChange={e => setForm(prev => ({ ...prev, [field]: e.target.value }))}
-              className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500/50"
-            />
+    <div className="space-y-6 max-w-lg">
+
+      {/* ── Avatar area ─────────────────────────────────────────── */}
+      <div className="flex items-center gap-5">
+        {/* Photo circle */}
+        <div
+          className="relative group cursor-pointer shrink-0"
+          onClick={() => fileInputRef.current?.click()}
+          onDrop={handleDrop}
+          onDragOver={e => e.preventDefault()}
+        >
+          <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-2xl font-bold text-white">
+            {preview
+              ? <img src={preview} alt="avatar" className="w-full h-full object-cover" />
+              : initial
+            }
           </div>
-        ))}
-      </div>
-      <div>
-        <label className="text-xs text-slate-400 mb-1 block">Email</label>
+          {/* Hover overlay */}
+          <div className="absolute inset-0 rounded-2xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <Camera className="w-5 h-5 text-white" />
+          </div>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-white mb-1">{form.name || user?.name}</p>
+          <p className="text-xs text-slate-500 mb-3">{user?.email}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/30 text-xs text-blue-400 hover:bg-blue-600/30 transition-colors font-medium"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              {preview ? 'Trocar foto' : 'Adicionar foto'}
+            </button>
+            {preview && (
+              <button
+                onClick={handleRemove}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 hover:bg-red-500/20 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Remover
+              </button>
+            )}
+          </div>
+          <p className="text-[11px] text-slate-600 mt-2">JPG, PNG ou WebP · máx. 5 MB</p>
+        </div>
+
         <input
-          value={form.email}
-          readOnly
-          className="w-full px-4 py-2.5 rounded-xl bg-white/3 border border-white/5 text-sm text-slate-500 cursor-not-allowed"
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
         />
       </div>
-      <div>
-        <label className="text-xs text-slate-400 mb-1 block">Bio</label>
-        <textarea
-          value={form.bio}
-          onChange={e => setForm(prev => ({ ...prev, bio: e.target.value }))}
-          rows={3}
-          className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500/50 resize-none"
-        />
+
+      {/* ── Form fields ─────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <div>
+          <label className="text-xs text-slate-400 mb-1.5 block">Nome</label>
+          <input
+            value={form.name}
+            onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+            className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500/50 transition-colors"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-slate-400 mb-1.5 block">Email</label>
+          <input
+            value={form.email}
+            readOnly
+            className="w-full px-4 py-2.5 rounded-xl bg-white/3 border border-white/5 text-sm text-slate-500 cursor-not-allowed"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-slate-400 mb-1.5 block">Cargo</label>
+          <input
+            value={user?.role === 'admin' ? 'Administrador' : user?.role === 'manager' ? 'Gerente' : 'Agente'}
+            readOnly
+            className="w-full px-4 py-2.5 rounded-xl bg-white/3 border border-white/5 text-sm text-slate-500 cursor-not-allowed"
+          />
+        </div>
       </div>
-      <Button variant="glow" size="md">Salvar Alterações</Button>
+
+      {/* Error */}
+      {error && (
+        <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>
+      )}
+
+      {/* Save button */}
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className={`flex items-center justify-center gap-2 h-10 px-6 rounded-xl text-sm font-semibold transition-all ${
+          saved
+            ? 'bg-green-600 text-white'
+            : 'bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50'
+        }`}
+      >
+        {saved    ? <><CheckCircle2 className="w-4 h-4" /> Salvo!</>
+         : saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
+         :          'Salvar Alterações'}
+      </button>
     </div>
   )
 }

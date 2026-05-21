@@ -47,7 +47,7 @@ function setFaviconDot(hasDot: boolean) {
     ctx.arc(26, 6, 7, 0, 2 * Math.PI)
     ctx.fillStyle = '#22c55e'
     ctx.fill()
-    ctx.strokeStyle = '#04070f'
+    ctx.strokeStyle = '#0b0b0f'
     ctx.lineWidth = 2
     ctx.stroke()
     link!.href = canvas.toDataURL('image/png')

@@ -2,26 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-transition {
+  animation: page-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @layer base {
   :root {
-    --background: 222 47% 7%;
+    --background: 240 6% 6%;
     --foreground: 210 40% 98%;
-    --card: 222 47% 10%;
+    --card: 240 6% 9%;
     --card-foreground: 210 40% 98%;
-    --popover: 222 47% 10%;
+    --popover: 240 6% 9%;
     --popover-foreground: 210 40% 98%;
     --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 7%;
-    --secondary: 217 32% 17%;
+    --primary-foreground: 240 6% 6%;
+    --secondary: 240 5% 15%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217 32% 17%;
+    --muted: 240 5% 15%;
     --muted-foreground: 215 20% 65%;
-    --accent: 217 32% 17%;
+    --accent: 240 5% 15%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217 32% 17%;
-    --input: 217 32% 17%;
+    --border: 240 5% 15%;
+    --input: 240 5% 15%;
     --ring: 217 91% 60%;
     --radius: 0.5rem;
   }
@@ -99,6 +114,6 @@
   }
 
   .mesh-bg {
-    background: radial-gradient(ellipse at top, hsl(222 47% 12%) 0%, hsl(222 47% 7%) 70%);
+    background: radial-gradient(ellipse at top, hsl(240 6% 11%) 0%, hsl(240 6% 6%) 70%);
   }
 }

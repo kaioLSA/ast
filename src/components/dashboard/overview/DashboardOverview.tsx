@@ -134,7 +134,7 @@ function MetaSection({ data, loading, error, period, setPeriod }: MetaSectionPro
           onChange={e => setPeriod(e.target.value)}
           className="text-xs text-slate-300 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-500/50 cursor-pointer"
         >
-          {PERIODS.map(p => <option key={p.value} value={p.value} className="bg-[#0d1425]">{p.label}</option>)}
+          {PERIODS.map(p => <option key={p.value} value={p.value} className="bg-[#1c1c24]">{p.label}</option>)}
         </select>
       </div>
 
@@ -159,17 +159,17 @@ function MetaSection({ data, loading, error, period, setPeriod }: MetaSectionPro
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
             {[
-              { label: 'Gasto Total', value: `R$ ${fmt(data.totalSpend)}`, icon: DollarSign, color: 'border-green-500/20 bg-green-500/5', iconColor: 'text-green-400' },
-              { label: 'Alcance', value: fmtInt(data.totalReach), icon: Eye, color: 'border-blue-500/20 bg-blue-500/5', iconColor: 'text-blue-400' },
-              { label: 'Impressões', value: fmtInt(data.totalImpressions), icon: Megaphone, color: 'border-purple-500/20 bg-purple-500/5', iconColor: 'text-purple-400' },
-              { label: 'Cliques', value: fmtInt(data.totalClicks), icon: MousePointer, color: 'border-cyan-500/20 bg-cyan-500/5', iconColor: 'text-cyan-400' },
+              { label: 'Gasto Total', value: `R$ ${fmt(data.totalSpend)}`, icon: DollarSign },
+              { label: 'Alcance', value: fmtInt(data.totalReach), icon: Eye },
+              { label: 'Impressões', value: fmtInt(data.totalImpressions), icon: Megaphone },
+              { label: 'Cliques', value: fmtInt(data.totalClicks), icon: MousePointer },
             ].map(m => {
               const Icon = m.icon
               return (
-                <div key={m.label} className={cn('rounded-2xl border p-5', m.color)}>
+                <div key={m.label} className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.09] to-white/[0.03] p-5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.10)] hover:scale-[1.02] transition-transform duration-200">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs text-slate-400">{m.label}</p>
-                    <div className={cn('p-1.5 rounded-lg bg-white/5', m.iconColor)}><Icon className="w-3.5 h-3.5" /></div>
+                    <div className="p-1.5 rounded-lg bg-white/8 text-slate-300"><Icon className="w-3.5 h-3.5" /></div>
                   </div>
                   <p className="text-xl font-bold text-white tabular-nums">{m.value}</p>
                 </div>
@@ -179,19 +179,19 @@ function MetaSection({ data, loading, error, period, setPeriod }: MetaSectionPro
 
           <div className="grid grid-cols-3 gap-4">
             {[
-              { label: 'CPM', sublabel: 'Custo por mil impressões', value: `R$ ${fmt(data.cpm)}`, icon: BarChart3, color: 'border-orange-500/20 bg-orange-500/5', iconColor: 'text-orange-400' },
-              { label: 'CPC', sublabel: 'Custo por clique', value: `R$ ${fmt(data.cpc)}`, icon: MousePointerClick, color: 'border-yellow-500/20 bg-yellow-500/5', iconColor: 'text-yellow-400' },
-              { label: 'CTR', sublabel: 'Taxa de clique', value: `${data.ctr}%`, icon: Target, color: 'border-teal-500/20 bg-teal-500/5', iconColor: 'text-teal-400' },
+              { label: 'CPM', sublabel: 'Custo por mil impressões', value: `R$ ${fmt(data.cpm)}`, icon: BarChart3 },
+              { label: 'CPC', sublabel: 'Custo por clique', value: `R$ ${fmt(data.cpc)}`, icon: MousePointerClick },
+              { label: 'CTR', sublabel: 'Taxa de clique', value: `${data.ctr}%`, icon: Target },
             ].map(m => {
               const Icon = m.icon
               return (
-                <div key={m.label} className={cn('rounded-2xl border p-5', m.color)}>
+                <div key={m.label} className="rounded-2xl border border-white/8 bg-white/[0.04] p-5">
                   <div className="flex items-center justify-between mb-2">
                     <div>
                       <p className="text-sm font-bold text-white">{m.label}</p>
                       <p className="text-[10px] text-slate-500">{m.sublabel}</p>
                     </div>
-                    <div className={cn('p-1.5 rounded-lg bg-white/5', m.iconColor)}><Icon className="w-3.5 h-3.5" /></div>
+                    <div className="p-1.5 rounded-lg bg-white/5 text-slate-400"><Icon className="w-3.5 h-3.5" /></div>
                   </div>
                   <p className="text-2xl font-bold text-white tabular-nums mt-3">{m.value}</p>
                 </div>
@@ -271,60 +271,12 @@ export function DashboardOverview() {
 
   // Computed metric cards
   const metricCards = [
-    {
-      label: 'Receita Total',
-      value: fmtBRL(totalRevenue),
-      ...pct(revLast30, revPrev30),
-      icon: DollarSign,
-      color: 'from-green-500/20 to-emerald-500/10',
-      iconColor: 'text-green-400',
-      border: 'border-green-500/20',
-    },
-    {
-      label: 'Novos Leads',
-      value: String(leadsLast30.length),
-      ...pct(leadsLast30.length, leadsPrev30.length),
-      icon: Users,
-      color: 'from-blue-500/20 to-blue-500/10',
-      iconColor: 'text-blue-400',
-      border: 'border-blue-500/20',
-    },
-    {
-      label: 'Taxa de Conversão',
-      value: `${convRate.toFixed(1)}%`,
-      ...pct(convRate, convPrev),
-      icon: Target,
-      color: 'from-purple-500/20 to-purple-500/10',
-      iconColor: 'text-purple-400',
-      border: 'border-purple-500/20',
-    },
-    {
-      label: 'MRR',
-      value: fmtBRL(mrr),
-      ...pct(mrr, mrrPrev),
-      icon: BarChart3,
-      color: 'from-cyan-500/20 to-cyan-500/10',
-      iconColor: 'text-cyan-400',
-      border: 'border-cyan-500/20',
-    },
-    {
-      label: 'Negócios Fechados',
-      value: String(closedWon.length),
-      ...pct(closedWonCurr.length, closedWonPrev.length),
-      icon: Zap,
-      color: 'from-yellow-500/20 to-yellow-500/10',
-      iconColor: 'text-yellow-400',
-      border: 'border-yellow-500/20',
-    },
-    {
-      label: 'Ticket Médio',
-      value: fmtBRL(avgTicket),
-      ...pct(avgTicket, avgTicketPrev),
-      icon: Activity,
-      color: 'from-orange-500/20 to-orange-500/10',
-      iconColor: 'text-orange-400',
-      border: 'border-orange-500/20',
-    },
+    { label: 'Receita Total',      value: fmtBRL(totalRevenue),          ...pct(revLast30, revPrev30),                          icon: DollarSign },
+    { label: 'Novos Leads',        value: String(leadsLast30.length),     ...pct(leadsLast30.length, leadsPrev30.length),         icon: Users      },
+    { label: 'Taxa de Conversão',  value: `${convRate.toFixed(1)}%`,      ...pct(convRate, convPrev),                             icon: Target     },
+    { label: 'MRR',                value: fmtBRL(mrr),                    ...pct(mrr, mrrPrev),                                   icon: BarChart3  },
+    { label: 'Negócios Fechados',  value: String(closedWon.length),       ...pct(closedWonCurr.length, closedWonPrev.length),     icon: Zap        },
+    { label: 'Ticket Médio',       value: fmtBRL(avgTicket),              ...pct(avgTicket, avgTicketPrev),                       icon: Activity   },
   ]
 
   // Source breakdown from lead.source field
@@ -354,7 +306,9 @@ export function DashboardOverview() {
   const cplValue = metaData?.cpl != null ? `R$ ${fmt(metaData.cpl)}` : '—'
   const qualifiedLeads = metaData ? Math.round(metaData.leadCount * 0.25) : 0
   const cpmqlValue = (metaData && qualifiedLeads > 0) ? `R$ ${fmt(metaData.totalSpend / qualifiedLeads)}` : '—'
-  const cacValue = metaData?.cac != null ? `R$ ${fmt(metaData.cac)}` : '—'
+  // CAC = total Meta spend ÷ number of CRM clients (not Meta ad accounts)
+  const cacRaw = (metaData && clients.length > 0) ? metaData.totalSpend / clients.length : null
+  const cacValue = cacRaw != null ? `R$ ${fmt(cacRaw)}` : '—'
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -365,7 +319,7 @@ export function DashboardOverview() {
           <p className="text-slate-400 text-sm mt-0.5">Visão geral — {periodLabel}</p>
         </div>
         <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 text-sm font-medium">
-          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
           Sistema operacional
         </div>
       </div>
@@ -388,18 +342,18 @@ export function DashboardOverview() {
             return (
               <div
                 key={m.label}
-                className={cn('rounded-2xl border bg-gradient-to-br p-5 hover:scale-[1.02] transition-transform duration-200', m.color, m.border)}
+                className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.09] to-white/[0.03] p-5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.10)] hover:scale-[1.02] transition-transform duration-200"
               >
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-sm text-slate-400">{m.label}</p>
-                  <div className={cn('p-2 rounded-xl bg-white/5', m.iconColor)}>
+                  <div className="p-2 rounded-xl bg-white/8 text-slate-300">
                     <Icon className="w-4 h-4" />
                   </div>
                 </div>
                 <p className="text-2xl font-bold text-white tabular-nums">{m.value}</p>
-                <div className={cn('flex items-center gap-1 mt-2 text-xs font-medium', m.up ? 'text-green-400' : 'text-red-400')}>
+                <div className={cn('flex items-center gap-1 mt-2 text-xs font-medium', m.up ? 'text-blue-400' : 'text-red-400')}>
                   {m.up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                  {m.label} vs mês anterior
+                  {m.change} vs mês anterior
                 </div>
               </div>
             )
@@ -418,13 +372,13 @@ export function DashboardOverview() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
-            { label: 'CPL', sublabel: 'Custo por Lead', value: cplValue, hasData: metaData?.cpl != null, desc: 'Gasto médio para captar cada lead', icon: MousePointerClick, color: 'border-blue-500/20 bg-blue-500/5', iconColor: 'text-blue-400', tooltip: 'Total investido ÷ conversas/leads iniciados (Meta Ads)' },
-            { label: 'CPMQL', sublabel: 'Custo por Lead Qualificado', value: cpmqlValue, hasData: cpmqlValue !== '—', desc: 'Gasto médio por lead que avançou no funil', icon: UserCheck, color: 'border-purple-500/20 bg-purple-500/5', iconColor: 'text-purple-400', tooltip: 'Total investido ÷ leads qualificados (estimado ~25% do total)' },
-            { label: 'CAC', sublabel: 'Custo por Aquisição', value: cacValue, hasData: metaData?.cac != null, desc: 'Gasto médio para fechar cada cliente', icon: ShoppingCart, color: 'border-green-500/20 bg-green-500/5', iconColor: 'text-green-400', tooltip: `Total investido ÷ ${clients.length} clientes gerenciados` },
+            { label: 'CPL',   sublabel: 'Custo por Lead',            value: cplValue,   hasData: metaData?.cpl != null, desc: 'Gasto médio para captar cada lead',        icon: MousePointerClick, tooltip: 'Total investido ÷ conversas/leads iniciados (Meta Ads)' },
+            { label: 'CPMQL', sublabel: 'Custo por Lead Qualificado', value: cpmqlValue, hasData: cpmqlValue !== '—',    desc: 'Gasto médio por lead que avançou no funil', icon: UserCheck,         tooltip: 'Total investido ÷ leads qualificados (estimado ~25% do total)' },
+            { label: 'CAC',   sublabel: 'Custo por Aquisição',        value: cacValue,   hasData: cacRaw != null,        desc: 'Gasto médio para fechar cada cliente',      icon: ShoppingCart,      tooltip: `Total investido ÷ ${clients.length} clientes gerenciados` },
           ].map((m) => {
             const Icon = m.icon
             return (
-              <div key={m.label} className={cn('rounded-2xl border p-5', m.color)}>
+              <div key={m.label} className="rounded-2xl border border-white/8 bg-white/[0.04] p-5">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <div className="flex items-center gap-2">
@@ -433,7 +387,7 @@ export function DashboardOverview() {
                     </div>
                     <p className="text-xs text-slate-500 mt-1">{m.desc}</p>
                   </div>
-                  <div className={cn('p-2 rounded-xl bg-white/5 shrink-0', m.iconColor)}><Icon className="w-4 h-4" /></div>
+                  <div className="p-2 rounded-xl bg-white/5 text-slate-400 shrink-0"><Icon className="w-4 h-4" /></div>
                 </div>
                 <p className={cn('text-3xl font-bold tabular-nums mt-4', m.hasData ? 'text-white' : 'text-slate-600')}>
                   {metaLoading ? <span className="inline-block h-8 w-28 bg-white/10 rounded animate-pulse" /> : m.value}
@@ -454,7 +408,7 @@ export function DashboardOverview() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* Leads recentes */}
-        <div className="lg:col-span-2 rounded-2xl border border-white/10 bg-white/3 p-6 backdrop-blur-sm">
+        <div className="lg:col-span-2 rounded-2xl border border-white/8 bg-white/[0.04] p-6">
           <div className="flex items-center justify-between mb-5">
             <h2 className="font-semibold text-white">Leads Recentes</h2>
             <a href="/leads" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
@@ -509,7 +463,7 @@ export function DashboardOverview() {
         </div>
 
         {/* Origem dos Leads + IA */}
-        <div className="rounded-2xl border border-white/10 bg-white/3 p-6 backdrop-blur-sm">
+        <div className="rounded-2xl border border-white/8 bg-white/[0.04] p-6">
           <div className="flex items-center justify-between mb-5">
             <h2 className="font-semibold text-white">Origem dos Leads</h2>
             <span className="text-[11px] text-slate-500">{leads.length} total</span>
