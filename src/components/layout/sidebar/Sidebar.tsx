@@ -7,7 +7,8 @@ import { useRef, useState, useLayoutEffect, useCallback, useEffect } from 'react
 import {
   LayoutDashboard, Users, MessageCircle,
   BarChart3, DollarSign, Calendar, FileText, Settings, UsersRound,
-  ChevronLeft, ChevronRight, LogOut, Building2, Sparkles,
+  ChevronLeft, ChevronRight, LogOut, Building2, Sparkles, ClipboardList,
+  ListChecks, Workflow, Video,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { useSidebar } from '@/hooks/useSidebar'
@@ -20,7 +21,11 @@ const navItems = [
   { label: 'Dashboard', href: routes.dashboard, icon: LayoutDashboard, group: 'main' },
   { label: 'Leads', href: routes.leads.root, icon: Users, group: 'main' },
   { label: 'Clientes', href: routes.clients, icon: Building2, group: 'main' },
+  { label: 'Automações', href: routes.automations, icon: Workflow, group: 'main' },
+  { label: 'Reuniões', href: routes.meetings, icon: Video, group: 'main' },
   { label: 'WhatsApp', href: routes.whatsapp, icon: MessageCircle, group: 'tools' },
+  { label: 'Formulários', href: '/forms' as const, icon: ClipboardList, group: 'tools' },
+  { label: 'Task', href: routes.tasks, icon: ListChecks, group: 'tools' },
   { label: 'IA', href: routes.ai, icon: Sparkles, group: 'tools' },
   { label: 'Analytics', href: routes.analytics, icon: BarChart3, group: 'tools' },
   { label: 'Financeiro', href: routes.finance.root, icon: DollarSign, group: 'tools' },
@@ -153,8 +158,11 @@ export function Sidebar() {
       <div className="p-3 border-t border-white/8">
         {!isCollapsed && user && (
           <div className="flex items-center gap-2.5 px-3 py-2 rounded-xl mb-1">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-xs font-bold text-white shrink-0">
-              {user.name.charAt(0)}
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-xs font-bold text-white shrink-0 overflow-hidden">
+              {user.avatar
+                ? <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                : user.name.charAt(0)
+              }
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-slate-200 truncate">{user.name}</p>

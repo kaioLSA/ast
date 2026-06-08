@@ -8,6 +8,7 @@ const H = () => ({ apikey: KEY!, Authorization: `Bearer ${KEY}`, 'Content-Type':
 export async function GET() {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ error: 'Não disponível no modo demonstração.' }, { status: 403 })
 
   // Filter by both company_id and user_id so each account sees only their own dashboards
   const res = await fetch(
@@ -21,6 +22,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ error: 'Não disponível no modo demonstração.' }, { status: 403 })
 
   const body = await req.json().catch(() => ({}))
   const payload = {

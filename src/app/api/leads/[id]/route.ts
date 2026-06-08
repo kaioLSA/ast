@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthUser } from '@/lib/utils/get-auth-user'
+import { hasPermission, forbiddenResponse } from '@/lib/utils/require-permission'
+import { DEMO_LEADS } from '@/lib/demo/data'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -18,6 +20,8 @@ export async function PATCH(
 ) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json(DEMO_LEADS[0])
+  if (!hasPermission(user, 'leads:write')) return forbiddenResponse('leads:write')
 
   const { id } = params
   const body = await request.json().catch(() => ({}))
@@ -53,6 +57,8 @@ export async function DELETE(
 ) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return new NextResponse(null, { status: 204 })
+  if (!hasPermission(user, 'leads:delete')) return forbiddenResponse('leads:delete')
 
   const { id } = params
 

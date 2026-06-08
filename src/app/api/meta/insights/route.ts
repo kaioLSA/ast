@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/utils/get-auth-user'
+import { DEMO_META_INSIGHTS } from '@/lib/demo/data'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -70,6 +71,7 @@ export async function GET(request: Request) {
   let token = process.env.META_ACCESS_TOKEN ?? ''
   let accountId = process.env.META_AD_ACCOUNT_ID ?? 'act_549337254577555'
 
+  if (user?.is_demo) return NextResponse.json(DEMO_META_INSIGHTS)
   if (user?.company_id) {
     const cfg = await getCompanyMetaConfig(user.company_id)
     if (cfg) {

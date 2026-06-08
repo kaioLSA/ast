@@ -13,6 +13,7 @@ export type Permission =
   | 'analytics:read'
   | 'ai:use'
   | 'whatsapp:read' | 'whatsapp:write'
+  | 'forms:read'
 
 export interface User {
   id: ID

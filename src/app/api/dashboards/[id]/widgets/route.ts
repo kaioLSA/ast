@@ -8,6 +8,7 @@ const H = () => ({ apikey: KEY!, Authorization: `Bearer ${KEY}`, 'Content-Type':
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ error: 'Não disponível no modo demonstração.' }, { status: 403 })
   const { id } = await params
   const res = await fetch(`${URL}/rest/v1/custom_dashboard_widgets?dashboard_id=eq.${id}&order=position.asc`, { headers: H(), cache: 'no-store' })
   if (!res.ok) return NextResponse.json([])
@@ -17,6 +18,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ error: 'Não disponível no modo demonstração.' }, { status: 403 })
   const { id } = await params
   const body = await req.json().catch(() => ({}))
 

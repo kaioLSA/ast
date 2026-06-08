@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthUser } from '@/lib/utils/get-auth-user'
+import { DEMO_TRANSACTIONS } from '@/lib/demo/data'
+import { hasPermission, forbiddenResponse } from '@/lib/utils/require-permission'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -16,6 +18,8 @@ function headers() {
 export async function GET(request: NextRequest) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json(DEMO_TRANSACTIONS)
+  if (!hasPermission(user, 'finance:read')) return forbiddenResponse('finance:read')
 
   const scope = request.nextUrl.searchParams.get('scope') ?? 'company'
 
@@ -47,6 +51,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json(DEMO_TRANSACTIONS[0], { status: 201 })
+  if (!hasPermission(user, 'finance:write')) return forbiddenResponse('finance:write')
 
   const body = await request.json().catch(() => ({}))
 

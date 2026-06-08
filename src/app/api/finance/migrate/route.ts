@@ -16,6 +16,8 @@ async function pgQuery(sql: string) {
 export async function POST() {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ error: 'Não disponível no modo demonstração.' }, { status: 403 })
+  if (user.role !== 'admin') return NextResponse.json({ error: 'Apenas administradores podem executar migrações' }, { status: 403 })
 
   // Add scope column: 'company' (shared) or 'personal' (private)
   await pgQuery(`ALTER TABLE financial_transactions ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'company'`)

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthUser } from '@/lib/utils/get-auth-user'
+import { DEMO_SEARCH } from '@/lib/demo/data'
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
 
   const q = request.nextUrl.searchParams.get('q')?.trim() ?? ''
   if (q.length < 2) return NextResponse.json({ leads: [], clients: [], transactions: [] })
+  if (user.is_demo) return NextResponse.json(DEMO_SEARCH)
 
   const encoded = encodeURIComponent(`*${q}*`)
   const cid = user.company_id

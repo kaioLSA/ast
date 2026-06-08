@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthUser } from '@/lib/utils/get-auth-user'
 import { evoFetch } from '@/lib/utils/evo-fetch'
+import { DEMO_WA_MESSAGES } from '@/lib/demo/data'
 
 const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE
 
@@ -26,8 +27,9 @@ export async function GET(
 ) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   const { id } = await params
+  if (user.is_demo) return NextResponse.json(DEMO_WA_MESSAGES[decodeURIComponent(id)] ?? [])
+
   const chatId = decodeURIComponent(id)
 
   try {

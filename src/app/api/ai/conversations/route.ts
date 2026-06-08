@@ -17,6 +17,7 @@ function sbHeaders() {
 export async function GET() {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ error: 'Não disponível no modo demonstração.' }, { status: 403 })
 
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/ai_conversations?select=id,title,created_at,updated_at&user_id=eq.${user.id}&company_id=eq.${user.company_id}&order=updated_at.desc`,
@@ -36,6 +37,7 @@ export async function GET() {
 export async function POST(_request: NextRequest) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ error: 'Não disponível no modo demonstração.' }, { status: 403 })
 
   const res = await fetch(`${SUPABASE_URL}/rest/v1/ai_conversations`, {
     method: 'POST',

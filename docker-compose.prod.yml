@@ -3,6 +3,9 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env.production
+    extra_hosts:
+      # permite o container acessar o serviço Whisper rodando no host da VPS
+      - "host.docker.internal:host-gateway"
     labels:
       - traefik.enable=true
       - traefik.http.routers.crm-startsette.rule=Host(`crm.startsette.com`)

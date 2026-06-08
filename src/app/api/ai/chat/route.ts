@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthUser } from '@/lib/utils/get-auth-user'
+import { hasPermission, forbiddenResponse } from '@/lib/utils/require-permission'
 import { anthropicTools, executeTool } from '../tools'
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? ''
@@ -151,6 +152,12 @@ function makeStream(
 export async function POST(request: NextRequest) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) {
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({ start(c) { c.enqueue(encoder.encode('Olá! Sou a IA da Startsette 👋 No modo demonstração estou com dados fictícios, mas em produção tenho acesso completo ao seu CRM — leads, clientes, agenda e muito mais!')); c.close() } })
+    return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } })
+  }
+  if (!hasPermission(user, 'ai:use')) return forbiddenResponse('ai:use')
 
   if (!ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY não configurada' }, { status: 500 })

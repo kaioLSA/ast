@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers'
+import { verifySessionToken } from './jwt'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -18,10 +19,10 @@ export async function getAuthUser(): Promise<AuthUser | null> {
     const token = cookieStore.get('auth-token')?.value
     if (!token) return null
 
-    const decoded = Buffer.from(token, 'base64').toString('utf-8')
-    const [userId] = decoded.split(':')
-    if (!userId) return null
+    const payload = await verifySessionToken(token)
+    if (!payload) return null
 
+    const userId = payload.userId
     if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) return null
 
     const res = await fetch(

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/utils/get-auth-user'
+import { hasPermission, forbiddenResponse } from '@/lib/utils/require-permission'
+import { DEMO_CLIENTS } from '@/lib/demo/data'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -18,11 +20,13 @@ export async function PATCH(
 ) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json(DEMO_CLIENTS[0])
+  if (!hasPermission(user, 'clients:write')) return forbiddenResponse('clients:write')
 
   const { id } = params
   const body = await request.json().catch(() => ({}))
 
-  const allowed = ['name', 'company_name', 'email', 'phone', 'status', 'value', 'deals', 'score', 'since', 'state']
+  const allowed = ['name', 'company_name', 'email', 'phone', 'status', 'value', 'deals', 'score', 'since', 'state', 'niche', 'tone_of_voice']
   const patch: Record<string, unknown> = {}
   for (const key of allowed) {
     if (key in body) patch[key] = body[key]
@@ -52,6 +56,8 @@ export async function DELETE(
 ) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return new NextResponse(null, { status: 204 })
+  if (!hasPermission(user, 'clients:delete')) return forbiddenResponse('clients:delete')
 
   const { id } = params
 

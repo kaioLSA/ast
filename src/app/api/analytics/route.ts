@@ -1,8 +1,18 @@
+import { hasPermission, forbiddenResponse } from '@/lib/utils/require-permission'
 import { NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/utils/get-auth-user'
+import { DEMO_ANALYTICS } from '@/lib/demo/data'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+// Retorna 'YYYY-MM-DD' no fuso de Brasília (UTC-3) independente do servidor
+function toBRDate(dateStr: string): string {
+  const d = new Date(dateStr)
+  // UTC-3 offset em ms
+  const br = new Date(d.getTime() - 3 * 60 * 60 * 1000)
+  return br.toISOString().slice(0, 10)
+}
 
 function headers() {
   return {
@@ -35,6 +45,8 @@ const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'S
 export async function GET() {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json(DEMO_ANALYTICS)
+  if (!hasPermission(user, 'analytics:read')) return forbiddenResponse('analytics:read')
 
   const cid = user.company_id
 
@@ -65,9 +77,10 @@ export async function GET() {
   for (let i = 29; i >= 0; i--) {
     const d   = new Date(today)
     d.setDate(d.getDate() - i)
-    const key = d.toISOString().slice(0, 10)   // 'YYYY-MM-DD'
-    const label = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`
-    const dayLeads = leads.filter(l => l.created_at?.slice(0, 10) === key)
+    const key = toBRDate(d.toISOString())   // 'YYYY-MM-DD' em Brasília
+    const brD = new Date(d.getTime() - 3 * 60 * 60 * 1000)
+    const label = `${brD.getUTCDate().toString().padStart(2, '0')}/${(brD.getUTCMonth() + 1).toString().padStart(2, '0')}`
+    const dayLeads = leads.filter(l => l.created_at ? toBRDate(l.created_at) === key : false)
     days30.push({
       day: label,
       leads: dayLeads.length,

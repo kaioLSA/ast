@@ -1,8 +1,32 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import bcrypt from 'bcryptjs'
+import { signSessionToken, signFpcToken } from '@/lib/utils/jwt'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+// ── In-memory rate limiter for login (brute-force protection) ─────────────────
+const loginAttempts = new Map<string, { count: number; resetAt: number }>()
+const MAX_ATTEMPTS = 10
+const WINDOW_MS = 15 * 60 * 1000 // 15 minutes
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now()
+  const entry = loginAttempts.get(ip)
+  if (!entry || now > entry.resetAt) {
+    loginAttempts.set(ip, { count: 1, resetAt: now + WINDOW_MS })
+    return true
+  }
+  if (entry.count >= MAX_ATTEMPTS) return false
+  entry.count++
+  return true
+}
+
+function resetRateLimit(ip: string) {
+  loginAttempts.delete(ip)
+}
+
+// ── Permissions ────────────────────────────────────────────────────────────────
 
 const ADMIN_PERMISSIONS = [
   'leads:read','leads:write','leads:delete',
@@ -46,6 +70,19 @@ async function querySupabase(path: string) {
 }
 
 export async function POST(request: NextRequest) {
+  // ── Rate limiting ──────────────────────────────────────────────────────────
+  const ip =
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    request.headers.get('x-real-ip') ??
+    'unknown'
+
+  if (!checkRateLimit(ip)) {
+    return NextResponse.json(
+      { success: false, message: 'Muitas tentativas. Aguarde 15 minutos e tente novamente.' },
+      { status: 429 }
+    )
+  }
+
   const body = await request.json().catch(() => ({}))
   const { email, password } = body as { email?: string; password?: string }
 
@@ -59,8 +96,9 @@ export async function POST(request: NextRequest) {
 
   const emailNorm = email.toLowerCase().trim()
 
+  // Fetch only non-sensitive company fields (no tokens/keys)
   const rows = await querySupabase(
-    `crm_users?select=id,email,name,role,custom_role,permissions,password_hash,is_demo,active,force_password_change,company_id,companies(name,slug,meta_pixel_id,meta_pixel_token,meta_access_token,meta_ad_account_id,whatsapp_phone_id,whatsapp_access_token)&email=eq.${encodeURIComponent(emailNorm)}&active=eq.true&limit=1`
+    `crm_users?select=id,email,name,role,custom_role,permissions,password_hash,is_demo,active,force_password_change,company_id,companies(name,slug)&email=eq.${encodeURIComponent(emailNorm)}&active=eq.true&limit=1`
   )
 
   const dbUser = rows?.[0]
@@ -74,10 +112,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: 'Email ou senha incorretos' }, { status: 401 })
   }
 
+  // Reset rate limit on successful auth
+  resetRateLimit(ip)
+
   // ── Force password change ──────────────────────────────────────────────────
   if (dbUser.force_password_change) {
-    // Return a short-lived change token — do NOT set auth cookie yet
-    const changeToken = Buffer.from(`${dbUser.id}:${Date.now()}:fpc`).toString('base64')
+    const changeToken = await signFpcToken(dbUser.id)
     return NextResponse.json({
       success: true,
       requiresPasswordChange: true,
@@ -109,7 +149,7 @@ export async function POST(request: NextRequest) {
     updatedAt: new Date().toISOString(),
   }
 
-  const token = Buffer.from(`${user.id}:${Date.now()}`).toString('base64')
+  const token = await signSessionToken(user.id)
 
   const response = NextResponse.json({
     success: true,
@@ -123,14 +163,12 @@ export async function POST(request: NextRequest) {
     },
   })
 
-  // secure: only enforce over HTTPS — when APP_URL starts with https (after SSL is set up)
   const isHttps = (process.env.NEXT_PUBLIC_APP_URL ?? '').startsWith('https')
   response.cookies.set('auth-token', token, {
     httpOnly: true,
     secure: isHttps,
     sameSite: 'lax',
     path: '/',
-    // Sem maxAge = session cookie: apagado ao fechar o navegador
   })
 
   return response

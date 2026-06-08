@@ -40,6 +40,7 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ error: 'Conta demonstração não pode ser editada.' }, { status: 403 })
 
   const body = await request.json().catch(() => ({}))
   const patch: Record<string, unknown> = {}
@@ -48,8 +49,20 @@ export async function PATCH(request: NextRequest) {
     patch.name = body.name.trim()
   }
   if ('avatar_url' in body) {
-    // Accept data URL (base64) or null to remove
-    patch.avatar_url = body.avatar_url ?? null
+    const av = body.avatar_url
+    if (av !== null && typeof av === 'string') {
+      // Only allow safe data URLs (images) or https:// URLs
+      const isDataImage = av.startsWith('data:image/')
+      const isHttps = av.startsWith('https://')
+      if (!isDataImage && !isHttps) {
+        return NextResponse.json({ error: 'avatar_url inválido' }, { status: 400 })
+      }
+      // Limit size: data URLs shouldn't exceed ~2MB base64
+      if (av.length > 2_097_152) {
+        return NextResponse.json({ error: 'avatar_url muito grande (máx 2MB)' }, { status: 400 })
+      }
+    }
+    patch.avatar_url = av ?? null
   }
 
   if (Object.keys(patch).length === 0) {

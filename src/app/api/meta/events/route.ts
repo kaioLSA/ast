@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { getAuthUser } from '@/lib/utils/get-auth-user'
 
 const PIXEL_ID = process.env.META_PIXEL_ID
 const ACCESS_TOKEN = process.env.META_ACCESS_TOKEN
@@ -12,6 +13,10 @@ async function sha256(value: string): Promise<string> {
 }
 
 export async function POST(request: NextRequest) {
+  const user = await getAuthUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ success: true, demo: true })
+
   try {
     if (!PIXEL_ID || !ACCESS_TOKEN) {
       return NextResponse.json({ error: 'Meta credentials not configured' }, { status: 500 })

@@ -33,6 +33,7 @@ function isProtected(email: string | undefined | null): boolean {
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ success: true })
   if (user.role !== 'admin')
     return NextResponse.json({ error: 'Apenas administradores podem remover membros' }, { status: 403 })
   if (params.id === user.id)
@@ -55,6 +56,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ success: true })
   if (user.role !== 'admin')
     return NextResponse.json({ error: 'Apenas administradores podem editar membros' }, { status: 403 })
 

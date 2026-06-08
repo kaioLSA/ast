@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthUser } from '@/lib/utils/get-auth-user'
+import { DEMO_LEADS, DEMO_CLIENTS } from '@/lib/demo/data'
 
 const SB  = process.env.NEXT_PUBLIC_SUPABASE_URL
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -17,6 +18,7 @@ function monthLabel(d: Date) {
 export async function GET(req: NextRequest) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ leads: DEMO_LEADS, clients: DEMO_CLIENTS, value: 0, label: '' })
 
   const source = req.nextUrl.searchParams.get('source') ?? ''
   const cid    = user.company_id

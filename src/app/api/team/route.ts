@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { getAuthUser } from '@/lib/utils/get-auth-user'
+import { DEMO_TEAM } from '@/lib/demo/data'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -16,6 +17,7 @@ function headers() {
 export async function GET() {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json(DEMO_TEAM)
 
   const base = `${SUPABASE_URL}/rest/v1/crm_users`
   const filter = `company_id=eq.${user.company_id}&order=created_at.asc`

@@ -8,6 +8,7 @@ const H = () => ({ apikey: KEY!, Authorization: `Bearer ${KEY}`, 'Content-Type':
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ error: 'Não disponível no modo demonstração.' }, { status: 403 })
   const { id } = await params
   const body = await req.json().catch(() => ({}))
   const res = await fetch(`${URL}/rest/v1/custom_dashboards?id=eq.${id}&company_id=eq.${user.company_id}`, { method: 'PATCH', headers: H(), body: JSON.stringify({ name: body.name }) })
@@ -18,6 +19,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ error: 'Não disponível no modo demonstração.' }, { status: 403 })
   const { id } = await params
   // Delete widgets first
   await fetch(`${URL}/rest/v1/custom_dashboard_widgets?dashboard_id=eq.${id}`, { method: 'DELETE', headers: H() })

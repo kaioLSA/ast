@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getAuthUser } from '@/lib/utils/get-auth-user'
 import { evoFetch } from '@/lib/utils/evo-fetch'
+import { hasPermission, forbiddenResponse } from '@/lib/utils/require-permission'
+import { DEMO_WA_CHATS } from '@/lib/demo/data'
 
 const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE
 
@@ -65,6 +67,8 @@ async function getSavedContacts(companyId: string): Promise<Record<string, strin
 export async function GET() {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json(DEMO_WA_CHATS)
+  if (!hasPermission(user, 'whatsapp:read')) return forbiddenResponse('whatsapp:read')
 
   try {
     // Fetch chats and saved contacts in parallel

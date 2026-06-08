@@ -10,6 +10,7 @@ type Ctx = { params: Promise<{ id: string; wid: string }> }
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ error: 'Não disponível no modo demonstração.' }, { status: 403 })
   const { wid } = await params
   const body = await req.json().catch(() => ({}))
   const allowed = ['title', 'color', 'col_span', 'tall', 'merged', 'position', 'config', 'widget_type', 'data_source']
@@ -23,6 +24,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 export async function DELETE(_: NextRequest, { params }: Ctx) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json({ error: 'Não disponível no modo demonstração.' }, { status: 403 })
   const { wid } = await params
   await fetch(`${URL}/rest/v1/custom_dashboard_widgets?id=eq.${wid}`, { method: 'DELETE', headers: H() })
   return NextResponse.json({ ok: true })

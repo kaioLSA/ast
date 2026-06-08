@@ -27,6 +27,7 @@ function request(method: string, path: string, body?: unknown): Promise<unknown>
         ...(payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
       },
       rejectUnauthorized: false, // allow self-signed SSL on Evolution API host
+      timeout: 30000,            // evita pendurar se a Evolution não responder
     }
 
     const req = transport.request(options, (res) => {
@@ -42,6 +43,7 @@ function request(method: string, path: string, body?: unknown): Promise<unknown>
     })
 
     req.on('error', reject)
+    req.on('timeout', () => { req.destroy(new Error('Evolution API timeout')) })
     if (payload) req.write(payload)
     req.end()
   })

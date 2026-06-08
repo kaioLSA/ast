@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, Plus, Building2, Phone, Mail, MoreHorizontal, Users, TrendingUp, DollarSign, Star, X, CheckCircle2, Trash2, Pencil, MapPin } from 'lucide-react'
+import { Search, Plus, Building2, Phone, Mail, MoreHorizontal, Users, TrendingUp, DollarSign, Star, X, CheckCircle2, Trash2, Pencil, MapPin, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { ContactAvatar } from '@/components/ui/ContactAvatar'
 import { useRealtime } from '@/hooks/useRealtime'
@@ -21,6 +21,8 @@ interface Client {
   avatar: string
   gradient: string
   state?: string
+  niche?: string
+  toneOfVoice?: string
 }
 
 const BRAZIL_STATES = [
@@ -56,7 +58,7 @@ const statusColor: Record<Client['status'], string> = {
   prospect: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
 }
 
-const emptyForm = { name: '', company: '', email: '', phone: '', status: 'active' as Client['status'], value: '', state: '' }
+const emptyForm = { name: '', company: '', email: '', phone: '', status: 'active' as Client['status'], value: '', state: '', niche: '', toneOfVoice: '' }
 
 function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false)
@@ -127,7 +129,7 @@ export default function ClientsPage() {
   useEffect(() => {
     fetch('/api/clients')
       .then(r => r.json())
-      .then((data: Array<{ id: string; name: string; company_name?: string; email?: string; phone?: string; status: Client['status']; value?: number; deals?: number; score?: number; since?: string; avatar?: string; gradient?: string; state?: string }>) => {
+      .then((data: Array<{ id: string; name: string; company_name?: string; email?: string; phone?: string; status: Client['status']; value?: number; deals?: number; score?: number; since?: string; avatar?: string; gradient?: string; state?: string; niche?: string; tone_of_voice?: string }>) => {
         if (Array.isArray(data)) {
           setClients(data.map(c => ({
             id: c.id,
@@ -143,6 +145,8 @@ export default function ClientsPage() {
             avatar: c.avatar || (c.name ? c.name.split(' ').map((w: string) => w[0] ?? '').join('').slice(0, 2).toUpperCase() : '?'),
             gradient: c.gradient || gradients[0],
             state: c.state,
+            niche: c.niche,
+            toneOfVoice: c.tone_of_voice,
           })))
         }
       })
@@ -203,6 +207,8 @@ export default function ClientsPage() {
       since,
       avatar: initials,
       gradient,
+      niche: form.niche || undefined,
+      toneOfVoice: form.toneOfVoice || undefined,
     }
     setClients(prev => [optimisticClient, ...prev])
     setSaved(true)
@@ -224,6 +230,8 @@ export default function ClientsPage() {
           avatar: initials,
           gradient,
           state: form.state || '',
+          niche: form.niche || '',
+          tone_of_voice: form.toneOfVoice || '',
         }),
       })
       if (res.ok) {
@@ -253,6 +261,8 @@ export default function ClientsPage() {
       status: c.status,
       value: c.value ? String(c.value) : '',
       state: c.state ?? '',
+      niche: c.niche ?? '',
+      toneOfVoice: c.toneOfVoice ?? '',
     })
     setEditClient(c)
     setViewClient(null)
@@ -269,9 +279,11 @@ export default function ClientsPage() {
       status: editForm.status,
       value: Number(editForm.value) || 0,
       state: editForm.state || '',
+      niche: editForm.niche || '',
+      tone_of_voice: editForm.toneOfVoice || '',
     }
     setClients(prev => prev.map(c => c.id === editClient.id
-      ? { ...c, ...patch, company: patch.company_name || '—', state: patch.state || undefined }
+      ? { ...c, ...patch, company: patch.company_name || '—', state: patch.state || undefined, niche: patch.niche || undefined, toneOfVoice: patch.tone_of_voice || undefined }
       : c
     ))
     try {
@@ -528,6 +540,35 @@ export default function ClientsPage() {
             </select>
           </div>
 
+          <div className="pt-1 border-t border-white/8">
+            <div className="flex items-center gap-1.5 mb-3 mt-3">
+              <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+              <span className="text-xs font-semibold text-slate-300">Dados para automações de IA</span>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Nicho</label>
+                <input
+                  type="text"
+                  placeholder="Ex: clínica estética, barbearia, odontologia"
+                  value={form.niche}
+                  onChange={e => setForm(prev => ({ ...prev, niche: e.target.value }))}
+                  className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Tom de voz</label>
+                <textarea
+                  rows={2}
+                  placeholder="Ex: emocional e próximo, fala direto com a cliente, sem formalidade"
+                  value={form.toneOfVoice}
+                  onChange={e => setForm(prev => ({ ...prev, toneOfVoice: e.target.value }))}
+                  className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/50 resize-none"
+                />
+              </div>
+            </div>
+          </div>
+
           <button
             onClick={handleCreate}
             disabled={!form.name || saved}
@@ -586,6 +627,35 @@ export default function ClientsPage() {
               <option value="">Selecione...</option>
               {BRAZIL_STATES.map(s => <option key={s.id} value={s.id}>{s.id} — {s.name}</option>)}
             </select>
+          </div>
+
+          <div className="pt-1 border-t border-white/8">
+            <div className="flex items-center gap-1.5 mb-3 mt-3">
+              <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+              <span className="text-xs font-semibold text-slate-300">Dados para automações de IA</span>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Nicho</label>
+                <input
+                  type="text"
+                  placeholder="Ex: clínica estética, barbearia, odontologia"
+                  value={editForm.niche}
+                  onChange={e => setEditForm(prev => ({ ...prev, niche: e.target.value }))}
+                  className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Tom de voz</label>
+                <textarea
+                  rows={2}
+                  placeholder="Ex: emocional e próximo, fala direto com a cliente, sem formalidade"
+                  value={editForm.toneOfVoice}
+                  onChange={e => setEditForm(prev => ({ ...prev, toneOfVoice: e.target.value }))}
+                  className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/50 resize-none"
+                />
+              </div>
+            </div>
           </div>
 
           <button

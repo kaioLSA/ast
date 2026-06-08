@@ -1,10 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import bcrypt from 'bcryptjs'
+import { verifyFpcToken, signSessionToken } from '@/lib/utils/jwt'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-const CHANGE_TOKEN_MAX_AGE_MS = 15 * 60 * 1000 // 15 minutes
 
 function sbHeaders() {
   return {
@@ -44,25 +43,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: 'A nova senha deve ter pelo menos 6 caracteres' }, { status: 400 })
   }
 
-  // Decode and validate change token
-  let userId: string
-  let issuedAt: number
-  try {
-    const decoded = Buffer.from(changeToken, 'base64').toString('utf-8')
-    const parts = decoded.split(':')
-    if (parts.length < 3 || parts[2] !== 'fpc') throw new Error('invalid')
-    userId = parts[0]
-    issuedAt = Number(parts[1])
-    if (isNaN(issuedAt) || Date.now() - issuedAt > CHANGE_TOKEN_MAX_AGE_MS) {
-      return NextResponse.json({ success: false, message: 'Token expirado. Faça login novamente.' }, { status: 401 })
-    }
-  } catch {
-    return NextResponse.json({ success: false, message: 'Token inválido' }, { status: 401 })
+  // Verify signed FPC token (replaces old base64 approach)
+  const payload = await verifyFpcToken(changeToken)
+  if (!payload) {
+    return NextResponse.json({ success: false, message: 'Token inválido ou expirado. Faça login novamente.' }, { status: 401 })
   }
+  const userId = payload.userId
 
-  // Fetch user
+  // Fetch user — only non-sensitive company fields
   const userRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/crm_users?select=id,email,name,role,permissions,is_demo,company_id,companies(name,slug,meta_pixel_id,meta_pixel_token,meta_access_token,meta_ad_account_id,whatsapp_phone_id,whatsapp_access_token)&id=eq.${userId}&active=eq.true&limit=1`,
+    `${SUPABASE_URL}/rest/v1/crm_users?select=id,email,name,role,permissions,is_demo,company_id,companies(name,slug)&id=eq.${userId}&active=eq.true&limit=1`,
     { headers: sbHeaders(), cache: 'no-store' }
   )
   if (!userRes.ok) return NextResponse.json({ success: false, message: 'Usuário não encontrado' }, { status: 404 })
@@ -84,7 +74,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: 'Erro ao atualizar senha' }, { status: 500 })
   }
 
-  // Now issue the real auth token and set cookie
+  // Issue real auth token (signed JWT)
   const user = {
     id: dbUser.id,
     name: dbUser.name,
@@ -100,7 +90,7 @@ export async function POST(request: NextRequest) {
     updatedAt: new Date().toISOString(),
   }
 
-  const token = Buffer.from(`${user.id}:${Date.now()}`).toString('base64')
+  const token = await signSessionToken(user.id)
 
   const response = NextResponse.json({
     success: true,
@@ -113,9 +103,10 @@ export async function POST(request: NextRequest) {
     },
   })
 
+  const isHttps = (process.env.NEXT_PUBLIC_APP_URL ?? '').startsWith('https')
   response.cookies.set('auth-token', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isHttps,
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7,
     path: '/',

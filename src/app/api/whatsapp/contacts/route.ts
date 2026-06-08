@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthUser } from '@/lib/utils/get-auth-user'
+import { DEMO_WA_CHATS } from '@/lib/demo/data'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
@@ -17,6 +18,7 @@ function sbHeaders() {
 export async function GET() {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json(DEMO_WA_CHATS.map(c => ({ id: `demo-contact-${c.phone}`, phone: c.phone, name: c.name, company_id: 'demo' })))
 
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/whatsapp_contacts?company_id=eq.${user.company_id}&select=phone,name`,

@@ -5,7 +5,7 @@ import { usePageTitle } from '@/hooks/usePageTitle'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import {
   Send, Search, RefreshCw, Users, MessageCircle, Loader2,
-  MoreVertical, X, Check, UserPlus, Briefcase, UsersRound, Contact,
+  MoreVertical, X, Check, UserPlus, Briefcase, UsersRound, Contact, FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { useWhatsAppStore } from '@/store/whatsapp.store'
@@ -118,6 +118,9 @@ export default function WhatsappPage() {
   // ── Context menu state ──
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; chat: Chat } | null>(null)
 
+  // ── Resumo semanal: settings por grupo (group_id → enabled) ──
+  const [summarySettings, setSummarySettings] = useState<Record<string, boolean>>({})
+
   // ── Modal state ──
   const [activeModal, setActiveModal] = useState<ModalType | null>(null)
   const [modalChat, setModalChat] = useState<Chat | null>(null)
@@ -162,6 +165,32 @@ export default function WhatsappPage() {
       document.removeEventListener('click', close)
     }
   }, [ctxMenu])
+
+  // ── Resumo semanal ──────────────────────────────────────────────────────────
+
+  // Carrega as configurações de resumo dos grupos
+  useEffect(() => {
+    fetch('/api/whatsapp/groups/summary-setting')
+      .then(r => (r.ok ? r.json() : {}))
+      .then((map: Record<string, boolean>) => setSummarySettings(map ?? {}))
+      .catch(() => {})
+  }, [])
+
+  const toggleSummary = async (chat: Chat) => {
+    const next = !summarySettings[chat.id]
+    setSummarySettings(s => ({ ...s, [chat.id]: next }))
+    setCtxMenu(null)
+    try {
+      await fetch('/api/whatsapp/groups/summary-setting', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ group_id: chat.id, group_name: chat.name, enabled: next }),
+      })
+    } catch {
+      // reverte em caso de erro
+      setSummarySettings(s => ({ ...s, [chat.id]: !next }))
+    }
+  }
 
   // ── Modal helpers ────────────────────────────────────────────────────────
 
@@ -504,7 +533,12 @@ export default function WhatsappPage() {
                     {/* Name + last msg */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-0.5">
-                        <p className="text-xs font-semibold text-white truncate pr-1">{c.name}</p>
+                        <p className="text-xs font-semibold text-white truncate pr-1 flex items-center gap-1">
+                          {c.isGroup && summarySettings[c.id] && (
+                            <FileText className="w-3 h-3 text-blue-400 shrink-0" aria-label="Resumo semanal ativo" />
+                          )}
+                          <span className="truncate">{c.name}</span>
+                        </p>
                         <span className="text-[10px] text-slate-500 shrink-0">{timeLabel(c.timestamp)}</span>
                       </div>
                       <p className="text-[11px] text-slate-500 truncate">{c.lastMsg}</p>
@@ -585,13 +619,13 @@ export default function WhatsappPage() {
                     <div key={m.id} className={cn('flex', m.from === 'me' ? 'justify-end' : 'justify-start')}>
                       <div className={cn(
                         'max-w-[65%] rounded-2xl px-4 py-2.5 text-sm',
-                        m.from === 'me' ? 'bg-green-600 text-white rounded-br-sm' : 'bg-white/8 border border-white/10 text-slate-200 rounded-bl-sm',
+                        m.from === 'me' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-white/8 border border-white/10 text-slate-200 rounded-bl-sm',
                       )}>
                         {m.from === 'them' && selectedChat.isGroup && m.senderName && (
                           <p className="text-[11px] font-semibold mb-1 text-blue-400">{m.senderName}</p>
                         )}
                         <p className="break-words whitespace-pre-wrap">{m.text}</p>
-                        <p className={cn('text-[10px] mt-1', m.from === 'me' ? 'text-green-200 text-right' : 'text-slate-500')}>
+                        <p className={cn('text-[10px] mt-1', m.from === 'me' ? 'text-blue-200 text-right' : 'text-slate-500')}>
                           {formatMsgTime(m.timestamp)}
                         </p>
                       </div>
@@ -608,12 +642,12 @@ export default function WhatsappPage() {
                     onChange={e => setInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
                     placeholder="Digite uma mensagem..."
-                    className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-green-500/50"
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500/50"
                   />
                   <button
                     onClick={sendMessage}
                     disabled={!input.trim() || sending}
-                    className="px-4 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
                   >
                     {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                   </button>
@@ -659,6 +693,28 @@ export default function WhatsappPage() {
               <UsersRound className="w-4 h-4 text-emerald-400" />
               Criar Grupo com Contato
             </button>
+          )}
+
+          {/* Resumo semanal — apenas para grupos */}
+          {ctxMenu.chat.isGroup && (
+            <>
+              <div className="my-1 border-t border-white/8" />
+              <button
+                onClick={() => toggleSummary(ctxMenu.chat)}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/8 transition-colors text-left"
+              >
+                <FileText className="w-4 h-4 text-blue-400" />
+                <span className="flex-1">Resumo Semanal</span>
+                <span className={cn(
+                  'text-[10px] px-1.5 py-0.5 rounded font-semibold',
+                  summarySettings[ctxMenu.chat.id]
+                    ? 'bg-emerald-500/20 text-emerald-300'
+                    : 'bg-white/8 text-slate-500',
+                )}>
+                  {summarySettings[ctxMenu.chat.id] ? 'ON' : 'OFF'}
+                </span>
+              </button>
+            </>
           )}
 
           {/* Only show "Save Contact" for contacts whose name looks like a phone number */}

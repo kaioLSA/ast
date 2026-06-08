@@ -17,6 +17,7 @@ function normalize(raw: string): string {
 export async function GET(request: NextRequest) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ url: null })
+  if (user.is_demo) return NextResponse.json({ url: null })
 
   const phone = request.nextUrl.searchParams.get('phone') ?? ''
   const normalized = normalize(phone)

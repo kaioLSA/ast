@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthUser } from '@/lib/utils/get-auth-user'
+import { DEMO_EVENTS } from '@/lib/demo/data'
+import { hasPermission, forbiddenResponse } from '@/lib/utils/require-permission'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -15,6 +17,8 @@ function supabaseHeaders() {
 export async function GET() {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json(DEMO_EVENTS)
+  if (!hasPermission(user, 'calendar:read')) return forbiddenResponse('calendar:read')
 
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/calendar_events?select=*&company_id=eq.${user.company_id}&order=year.asc,month.asc,day.asc`,
@@ -33,6 +37,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json(DEMO_EVENTS[0], { status: 201 })
+  if (!hasPermission(user, 'calendar:write')) return forbiddenResponse('calendar:write')
 
   const body = await request.json().catch(() => ({}))
 

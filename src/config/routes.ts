@@ -7,6 +7,8 @@ export const routes = {
   },
   dashboard: '/dashboard',
   clients: '/clients',
+  automations: '/automations',
+  meetings: '/meetings',
   leads: {
     root: '/leads',
     detail: (id: string) => `/leads/${id}`,
@@ -23,6 +25,7 @@ export const routes = {
   },
   calendar: '/calendar',
   reports: '/reports',
+  tasks: '/tasks',
   settings: {
     root: '/settings',
     profile: '/settings/profile',
@@ -43,6 +46,9 @@ export const publicRoutes = [
 
 export const protectedRoutes = [
   routes.dashboard,
+  routes.clients,
+  routes.automations,
+  routes.meetings,
   routes.leads.root,
   routes.whatsapp,
   routes.ai,
@@ -50,6 +56,7 @@ export const protectedRoutes = [
   routes.finance.root,
   routes.calendar,
   routes.reports,
+  routes.tasks,
   routes.settings.root,
   routes.team,
 ]

@@ -11,6 +11,12 @@ import {
   Flame, Thermometer, Snowflake, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
+
+// Retorna um objeto Date ajustado para Brasília (UTC-3) — garante que .getDate/.getMonth/.getFullYear retornem o dia correto
+function brDate(dateStr: string): Date {
+  const d = new Date(dateStr)
+  return new Date(d.getTime() - 3 * 60 * 60 * 1000)
+}
 import { BrazilMap, type StateCount } from './BrazilMap'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -56,8 +62,8 @@ function buildTimeSeries(leads: Lead[], clients: Client[], period: Period) {
       const to   = new Date(); to.setHours(h + 3, 0, 0, 0)
       result.push({
         label: `${String(h).padStart(2,'0')}h`,
-        leads:    leads.filter(l => { const d = new Date(l.created_at); return d >= from && d < to }).length,
-        clientes: clients.filter(c => { const d = new Date(c.created_at); return d >= from && d < to }).length,
+        leads:    leads.filter(l => { const d = brDate(l.created_at); return d >= from && d < to }).length,
+        clientes: clients.filter(c => { const d = brDate(c.created_at); return d >= from && d < to }).length,
       })
     }
   } else {
@@ -69,8 +75,8 @@ function buildTimeSeries(leads: Lead[], clients: Client[], period: Period) {
         : `${day.getDate()}/${day.getMonth()+1}`
       result.push({
         label,
-        leads:    leads.filter(l => { const d = new Date(l.created_at); return d >= day && d < next }).length,
-        clientes: clients.filter(c => { const d = new Date(c.created_at); return d >= day && d < next }).length,
+        leads:    leads.filter(l => { const d = brDate(l.created_at); return d >= day && d < next }).length,
+        clientes: clients.filter(c => { const d = brDate(c.created_at); return d >= day && d < next }).length,
       })
     }
   }
@@ -101,9 +107,9 @@ function DarkCalendar({ leads }: { leads: Lead[] }) {
     const map: Record<number, number> = {}
     let revenue = 0
     leads.forEach(l => {
-      const d = new Date(l.created_at)
-      if (d.getFullYear() === cursor.year && d.getMonth() === cursor.month) {
-        const day = d.getDate()
+      const d = brDate(l.created_at)
+      if (d.getUTCFullYear() === cursor.year && d.getUTCMonth() === cursor.month) {
+        const day = d.getUTCDate()
         map[day] = (map[day] || 0) + 1
         revenue += l.value || 0
       }
@@ -218,8 +224,8 @@ export function AnalyticsDashboard() {
     }).finally(() => setLoading(false))
   }, [])
 
-  const filteredLeads   = useMemo(() => leads.filter(l => new Date(l.created_at) >= periodStart(period)),   [leads, period])
-  const filteredClients = useMemo(() => clients.filter(c => new Date(c.created_at) >= periodStart(period)), [clients, period])
+  const filteredLeads   = useMemo(() => leads.filter(l => brDate(l.created_at) >= periodStart(period)),   [leads, period])
+  const filteredClients = useMemo(() => clients.filter(c => brDate(c.created_at) >= periodStart(period)), [clients, period])
   const timeSeries      = useMemo(() => buildTimeSeries(leads, clients, period), [leads, clients, period])
 
   const totalLeads   = filteredLeads.length

@@ -7,6 +7,7 @@ const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE
 export async function POST(request: NextRequest) {
   const user = await getAuthUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.is_demo) return NextResponse.json([])
 
   const body = await request.json().catch(() => ({}))
   const { subject, participants } = body as { subject?: string; participants?: string[] }

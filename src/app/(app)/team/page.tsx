@@ -9,7 +9,7 @@ import {
   Plus, Mail, X, CheckCircle2, Shield, User, Users, Eye, EyeOff,
   Building2, Calendar, DollarSign, BarChart3, MessageCircle,
   FileText, Target, Settings, Zap, Trash2, ChevronDown, ChevronUp, ShieldCheck, KeyRound, AlertTriangle, Lock,
-  Camera, Pencil, Loader2,
+  Camera, Pencil, Loader2, ClipboardList,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
@@ -107,6 +107,12 @@ const PERMISSION_GROUPS = [
     key: 'ai', label: 'Inteligência Artificial', icon: Zap,
     items: [
       { key: 'ai:use', label: 'Usar recursos de IA' },
+    ],
+  },
+  {
+    key: 'forms', label: 'Formulários Meta Ads', icon: ClipboardList,
+    items: [
+      { key: 'forms:read', label: 'Visualizar respostas dos formulários' },
     ],
   },
 ]
