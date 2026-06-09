@@ -65,5 +65,48 @@ def transcribe():
                 pass
 
 
+@app.post("/transcribe_segments")
+def transcribe_segments():
+    """Transcreve um arquivo (path no host) ou base64 e devolve segmentos com tempo.
+    body: { "path": "/docker/livekit/recordings/.../arquivo.ogg" } ou { "audio_base64": "..." }
+    -> { "segments": [ { "start": 0.0, "end": 2.4, "text": "..." } ] }
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    path = data.get("path")
+    b64 = data.get("audio_base64", "")
+
+    tmp_path = None
+    src = None
+    try:
+        if path and os.path.exists(path):
+            src = path
+        elif b64:
+            if "," in b64[:60] and b64[:5] == "data:":
+                b64 = b64.split(",", 1)[1]
+            audio_bytes = base64.b64decode(b64)
+            with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as f:
+                f.write(audio_bytes)
+                tmp_path = f.name
+                src = tmp_path
+
+        if not src:
+            return jsonify({"segments": [], "error": "sem audio"})
+
+        segments, _info = model.transcribe(src, language="pt", vad_filter=True)
+        out = [
+            {"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text.strip()}
+            for s in segments if s.text.strip()
+        ]
+        return jsonify({"segments": out})
+    except Exception as e:
+        return jsonify({"segments": [], "error": str(e)})
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=9000, threaded=True)

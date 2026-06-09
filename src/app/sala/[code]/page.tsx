@@ -1,18 +1,24 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useParams } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
-  LiveKitRoom, VideoConference, PreJoin, useLocalParticipant,
+  LiveKitRoom, useLocalParticipant, usePreviewTracks,
+  useTracks, GridLayout, ParticipantTile, RoomAudioRenderer, useChat,
+  useMediaDeviceSelect, useTrackToggle, useDataChannel, useParticipants, useRoomContext,
   type LocalUserChoices,
 } from '@livekit/components-react'
-import { Track } from 'livekit-client'
+import { Track, type LocalVideoTrack } from 'livekit-client'
 import '@livekit/components-styles'
-import { Loader2, Video, Sparkles, Check, X, Users, Image as ImageIcon, CircleOff, Camera, Mic, AlertTriangle, RefreshCw } from 'lucide-react'
+import { Loader2, Video, VideoOff, Check, X, Users, Image as ImageIcon, CircleOff, Camera, Mic, MicOff, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, MonitorUp, Smile, MessageSquare, PhoneOff, Send, Clock, Star } from 'lucide-react'
+import { cn } from '@/lib/utils/cn'
 
 const LIVEKIT_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL ?? ''
 
-type Phase = 'loading' | 'notfound' | 'expired' | 'prejoin' | 'knocking' | 'denied' | 'connected' | 'left'
+type Phase = 'loading' | 'notfound' | 'expired' | 'scheduled' | 'prejoin' | 'knocking' | 'denied' | 'connected' | 'left'
+
+const SEG_OPTS = { delegate: 'GPU' as const }
 
 const BG_IMAGES = [
   { label: 'Praia', url: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1280&q=80&auto=format&fit=crop' },
@@ -32,6 +38,7 @@ export default function SalaPage() {
   const [hostToken, setHostToken] = useState('')
   const [token, setToken] = useState('')
   const [meetingTitle, setMeetingTitle] = useState('Reunião')
+  const [scheduledAt, setScheduledAt] = useState<string | null>(null)
   const [choices, setChoices] = useState<LocalUserChoices | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -43,6 +50,10 @@ export default function SalaPage() {
       const info = await infoRes.json()
       if (info.expired) { if (!cancelled) setPhase('expired'); return }
       if (info.title) setMeetingTitle(info.title)
+      if (info.scheduled_at && new Date(info.scheduled_at).getTime() > Date.now()) {
+        if (!cancelled) { setScheduledAt(info.scheduled_at); setPhase('scheduled') }
+        return
+      }
 
       const hostRes = await fetch(`/api/meetings/${code}/host-token`, { method: 'POST' })
       if (hostRes.ok) {
@@ -97,13 +108,19 @@ export default function SalaPage() {
   // ── Sala conectada ───────────────────────────────────────────────────────────
   if (phase === 'connected' && token && choices) {
     return (
-      <div data-lk-theme="default" style={{ height: '100dvh' }} className="bg-[#0a0a0f]">
+      <div data-lk-theme="default" style={{ height: '100dvh' }} className="bg-[#171717]">
         <LiveKitRoom
           serverUrl={LIVEKIT_URL}
           token={token}
           connect
           audio={choices.audioEnabled ? (choices.audioDeviceId ? { deviceId: choices.audioDeviceId } : true) : false}
-          video={choices.videoEnabled ? (choices.videoDeviceId ? { deviceId: choices.videoDeviceId } : true) : false}
+          video={choices.videoEnabled
+            ? { deviceId: choices.videoDeviceId || undefined, resolution: { width: 1280, height: 720, frameRate: 60 } }
+            : false}
+          options={{
+            videoCaptureDefaults: { resolution: { width: 1280, height: 720, frameRate: 60 } },
+            publishDefaults: { videoEncoding: { maxFramerate: 60, maxBitrate: 3_000_000 } },
+          }}
           onDisconnected={() => setPhase('left')}
           style={{ height: '100%' }}
         >
@@ -131,16 +148,12 @@ export default function SalaPage() {
             {isHost ? `Entrando como ${ownerName}` : 'Ajuste sua câmera e microfone para entrar'}
           </p>
         </div>
-        <div data-lk-theme="default" className="w-full max-w-md rounded-2xl overflow-hidden border border-white/10">
+        <div className="w-full max-w-md">
           <PermissionGate>
-            <PreJoin
+            <CustomPreJoin
               defaults={{ username: ownerName || '', videoEnabled: true, audioEnabled: true }}
+              isHost={isHost}
               onSubmit={handlePreJoin}
-              joinLabel={isHost ? 'Entrar agora' : 'Pedir para entrar'}
-              micLabel="Microfone"
-              camLabel="Câmera"
-              userLabel="Seu nome"
-              persistUserChoices={false}
             />
           </PermissionGate>
         </div>
@@ -170,6 +183,21 @@ export default function SalaPage() {
             <div className="text-center py-4">
               <p className="text-white font-medium mb-1">Link expirado</p>
               <p className="text-sm text-slate-500">Esta reunião não está mais disponível.</p>
+            </div>
+          )}
+          {phase === 'scheduled' && (
+            <div className="flex flex-col items-center gap-3 py-4 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <Clock className="w-6 h-6 text-amber-400" />
+              </div>
+              <p className="text-white font-medium">{meetingTitle}</p>
+              <p className="text-sm text-slate-400">
+                Esta reunião está agendada para<br />
+                <strong className="text-white">{scheduledAt ? new Date(scheduledAt).toLocaleString('pt-BR', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' }) : ''}</strong>
+              </p>
+              <button onClick={() => location.reload()} className="mt-1 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 text-sm font-medium transition-colors">
+                Atualizar
+              </button>
             </div>
           )}
           {phase === 'knocking' && (
@@ -210,34 +238,321 @@ function Brand({ className = '' }: { className?: string }) {
   )
 }
 
+// ── Tela de preparação customizada (preview + fundo no menu da câmera) ──────────
+
+function CustomPreJoin({
+  defaults, isHost, onSubmit,
+}: {
+  defaults: { username?: string; videoEnabled?: boolean; audioEnabled?: boolean }
+  isHost: boolean
+  onSubmit: (c: LocalUserChoices) => void
+}) {
+  const [audioEnabled, setAudioEnabled] = useState(defaults.audioEnabled ?? true)
+  const [videoEnabled, setVideoEnabled] = useState(defaults.videoEnabled ?? true)
+  const [audioDeviceId, setAudioDeviceId] = useState('')
+  const [videoDeviceId, setVideoDeviceId] = useState('')
+  const [username, setUsername] = useState(defaults.username ?? '')
+  const [bg, setBg] = useState<SavedBg>(() => (typeof window !== 'undefined' ? loadBg() : { type: 'none' }))
+  const [customImg, setCustomImg] = useState<string>(() => {
+    const b = typeof window !== 'undefined' ? loadBg() : { type: 'none' as const }
+    return b.type === 'image' && b.value?.startsWith('data:') ? b.value : ''
+  })
+  const [menu, setMenu] = useState<'none' | 'cam' | 'mic'>('none')
+  const [micMode, setMicModeState] = useState<MicMode>(() => (typeof window !== 'undefined' ? loadMic() : { mode: 'open', code: 'Space', label: 'Espaço' }))
+  const [capturing, setCapturing] = useState(false)
+  const [liveBlur, setLiveBlur] = useState<number>(() => {
+    const b = typeof window !== 'undefined' ? loadBg() : { type: 'none' as const }
+    return b.type === 'blur' && b.radius ? b.radius : DEFAULT_BLUR
+  })
+
+  const setMic = (m: MicMode) => { setMicModeState(m); saveMic(m) }
+
+  // captura a tecla do push-to-talk
+  useEffect(() => {
+    if (!capturing) return
+    const h = (e: KeyboardEvent) => {
+      e.preventDefault()
+      setMic({ mode: 'ptt', code: e.code, label: keyLabel(e.code) })
+      setCapturing(false)
+    }
+    window.addEventListener('keydown', h, { once: true })
+    return () => window.removeEventListener('keydown', h)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capturing])
+  const [cams, setCams] = useState<MediaDeviceInfo[]>([])
+  const [mics, setMics] = useState<MediaDeviceInfo[]>([])
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  const opts = useMemo(() => ({
+    audio: audioEnabled ? (audioDeviceId ? { deviceId: audioDeviceId } : true) : false,
+    video: videoEnabled ? (videoDeviceId ? { deviceId: videoDeviceId } : true) : false,
+  }), [audioEnabled, videoEnabled, audioDeviceId, videoDeviceId])
+
+  const tracks = usePreviewTracks(opts)
+  const videoTrack = useMemo(
+    () => (tracks ?? []).find(t => t.kind === Track.Kind.Video) as LocalVideoTrack | undefined,
+    [tracks],
+  )
+
+  useEffect(() => {
+    const el = videoRef.current
+    if (el && videoTrack) videoTrack.attach(el)
+    return () => { if (videoTrack && el) videoTrack.detach(el) }
+  }, [videoTrack])
+
+  useEffect(() => {
+    navigator.mediaDevices.enumerateDevices().then(d => {
+      setCams(d.filter(x => x.kind === 'videoinput'))
+      setMics(d.filter(x => x.kind === 'audioinput'))
+    }).catch(() => {})
+  }, [tracks])
+
+  // aplica o fundo no preview ao vivo
+  useEffect(() => {
+    if (!videoTrack) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        if (bg.type === 'none') await videoTrack.stopProcessor()
+        else if (bg.type === 'blur') {
+          const { BackgroundBlur } = await import('@livekit/track-processors')
+          if (!cancelled) await videoTrack.setProcessor(BackgroundBlur(bg.radius ?? DEFAULT_BLUR, SEG_OPTS))
+        } else if (bg.type === 'image' && bg.value) {
+          const { VirtualBackground } = await import('@livekit/track-processors')
+          if (!cancelled) await videoTrack.setProcessor(VirtualBackground(bg.value, SEG_OPTS))
+        }
+      } catch { /* ignore */ }
+    })()
+    return () => { cancelled = true }
+  }, [videoTrack, bg])
+
+  useEffect(() => {
+    if (menu === 'none') return
+    const h = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setMenu('none') }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [menu])
+
+  const pickBg = (b: SavedBg) => { setBg(b); saveBg(b) }
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return
+    const r = new FileReader()
+    r.onload = () => { const d = r.result as string; setCustomImg(d); pickBg({ type: 'image', value: d }) }
+    r.readAsDataURL(f)
+  }
+  const selKey = bg.type === 'image' ? (bg.value || 'none') : bg.type
+
+  return (
+    <div ref={wrapRef} className="rounded-2xl border border-white/10 bg-[#111118] p-4 space-y-3">
+      {/* Preview */}
+      <div className="relative w-full aspect-video rounded-xl overflow-hidden bg-black">
+        {videoEnabled ? (
+          <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover" style={{ transform: 'scaleX(-1)' }} />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-2xl font-semibold text-white">
+              {(username || 'C').charAt(0).toUpperCase()}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Botões mic / câmera, cada um com seta */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="flex">
+          <button onClick={() => setAudioEnabled(v => !v)} className={cn('flex-1 flex items-center gap-2 h-10 px-3 rounded-l-xl text-sm border border-r-0 transition-colors', audioEnabled ? 'bg-white/5 border-white/10 text-white' : 'bg-red-500/15 border-red-500/20 text-red-300')}>
+            <Mic className="w-4 h-4 shrink-0" /> {audioEnabled ? 'Microfone' : 'Mudo'}
+          </button>
+          <button onClick={() => setMenu(m => m === 'mic' ? 'none' : 'mic')} className="w-9 h-10 rounded-r-xl border border-white/10 bg-white/5 text-slate-400 hover:text-white flex items-center justify-center">
+            <ChevronDown className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="flex">
+          <button onClick={() => setVideoEnabled(v => !v)} className={cn('flex-1 flex items-center gap-2 h-10 px-3 rounded-l-xl text-sm border border-r-0 transition-colors', videoEnabled ? 'bg-white/5 border-white/10 text-white' : 'bg-red-500/15 border-red-500/20 text-red-300')}>
+            <Camera className="w-4 h-4 shrink-0" /> {videoEnabled ? 'Câmera' : 'Desligada'}
+          </button>
+          <button onClick={() => setMenu(m => m === 'cam' ? 'none' : 'cam')} className="w-9 h-10 rounded-r-xl border border-white/10 bg-white/5 text-slate-400 hover:text-white flex items-center justify-center">
+            <ChevronDown className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Menu microfone */}
+      <AnimatePresence>
+        {menu === 'mic' && (
+          <motion.div
+            key="micmenu"
+            initial={{ opacity: 0, y: -6, scaleY: 0.96 }}
+            animate={{ opacity: 1, y: 0, scaleY: 1 }}
+            exit={{ opacity: 0, y: -6, scaleY: 0.96 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            style={{ transformOrigin: 'top' }}
+            className="rounded-xl border border-white/10 bg-[#1c1c24] p-1.5"
+          >
+            <p className="text-[10px] uppercase tracking-wide text-slate-500 px-2 py-1">Microfone</p>
+            {mics.length === 0 && <p className="text-xs text-slate-600 px-2 py-1">Nenhum encontrado</p>}
+            {mics.map(d => (
+              <button key={d.deviceId} onClick={() => { setAudioDeviceId(d.deviceId) }} className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-sm flex items-center gap-2', audioDeviceId === d.deviceId ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5')}>
+                {audioDeviceId === d.deviceId && <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+                <span className="truncate">{d.label || 'Microfone'}</span>
+              </button>
+            ))}
+
+            <div className="border-t border-white/10 mt-1.5 pt-1.5">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500 px-2 pb-1">Modo do microfone</p>
+              <button onClick={() => setMic({ ...micMode, mode: 'open' })} className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-sm flex items-center gap-2', micMode.mode === 'open' ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5')}>
+                {micMode.mode === 'open' && <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+                <span>Falar automaticamente</span>
+              </button>
+              <button onClick={() => setMic({ ...micMode, mode: 'ptt' })} className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-sm flex items-center gap-2', micMode.mode === 'ptt' ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5')}>
+                {micMode.mode === 'ptt' && <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+                <span>Apertar para falar</span>
+              </button>
+              {micMode.mode === 'ptt' && (
+                <div className="flex items-center justify-between px-2.5 py-1.5 mt-1">
+                  <span className="text-[11px] text-slate-400">
+                    Tecla: <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white text-[10px] font-mono">{micMode.label}</kbd>
+                  </span>
+                  <button onClick={() => setCapturing(true)} className="text-[11px] text-blue-400 hover:text-blue-300">
+                    {capturing ? 'Pressione uma tecla...' : 'Alterar'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Menu câmera + plano de fundo */}
+      <AnimatePresence>
+        {menu === 'cam' && (
+          <motion.div
+            key="cammenu"
+            initial={{ opacity: 0, y: -6, scaleY: 0.96 }}
+            animate={{ opacity: 1, y: 0, scaleY: 1 }}
+            exit={{ opacity: 0, y: -6, scaleY: 0.96 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            style={{ transformOrigin: 'top' }}
+            className="rounded-xl border border-white/10 bg-[#1c1c24] p-2 space-y-2"
+          >
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-slate-500 px-1 py-1">Câmera</p>
+            {cams.length === 0 && <p className="text-xs text-slate-600 px-1 py-1">Nenhuma encontrada</p>}
+            {cams.map(d => (
+              <button key={d.deviceId} onClick={() => setVideoDeviceId(d.deviceId)} className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-sm flex items-center gap-2', videoDeviceId === d.deviceId ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5')}>
+                {videoDeviceId === d.deviceId && <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+                <span className="truncate">{d.label || 'Câmera'}</span>
+              </button>
+            ))}
+          </div>
+          <div className="border-t border-white/10 pt-2">
+            <p className="text-[10px] uppercase tracking-wide text-slate-500 px-1 pb-1.5">Plano de fundo</p>
+            <div className="grid grid-cols-4 gap-1.5">
+              <EffectTile selected={selKey === 'none'} onClick={() => pickBg({ type: 'none' })}>
+                <CircleOff className="w-4 h-4 text-slate-300" /><span className="text-[9px] text-slate-400 mt-0.5">Nenhum</span>
+              </EffectTile>
+              <EffectTile selected={selKey === 'blur'} onClick={() => pickBg({ type: 'blur', radius: liveBlur })}>
+                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-slate-400/60 to-slate-600/60 blur-[2px]" />
+              </EffectTile>
+              {BG_IMAGES.map(img => (
+                <EffectTile key={img.url} selected={selKey === img.url} onClick={() => pickBg({ type: 'image', value: img.url })}>
+                  <img src={img.url} alt={img.label} className="absolute inset-0 w-full h-full object-cover rounded-lg" />
+                </EffectTile>
+              ))}
+              {customImg && (
+                <EffectTile selected={selKey === customImg} onClick={() => pickBg({ type: 'image', value: customImg })}>
+                  <img src={customImg} alt="Sua imagem" className="absolute inset-0 w-full h-full object-cover rounded-lg" />
+                </EffectTile>
+              )}
+              <EffectTile selected={false} onClick={() => fileRef.current?.click()}>
+                <ImageIcon className="w-4 h-4 text-slate-300" /><span className="text-[9px] text-slate-400 mt-0.5">Enviar</span>
+              </EffectTile>
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
+            {bg.type === 'blur' && (
+              <div className="mt-2.5">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-slate-400">Intensidade do desfoque</span>
+                  <span className="text-[10px] font-medium text-white">{radiusToPct(liveBlur)}%</span>
+                </div>
+                <input
+                  type="range" min={0} max={100} value={radiusToPct(liveBlur)}
+                  onChange={e => setLiveBlur(pctToRadius(Number(e.target.value)))}
+                  onPointerUp={() => pickBg({ type: 'blur', radius: liveBlur })}
+                  onKeyUp={() => pickBg({ type: 'blur', radius: liveBlur })}
+                  className="w-full accent-blue-500"
+                />
+              </div>
+            )}
+          </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Nome */}
+      <input
+        value={username}
+        onChange={e => setUsername(e.target.value)}
+        placeholder="Seu nome"
+        className="w-full h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/50"
+      />
+
+      {/* Entrar */}
+      <button
+        onClick={() => onSubmit({ username: username.trim() || 'Convidado', videoEnabled, audioEnabled, videoDeviceId, audioDeviceId })}
+        disabled={!username.trim()}
+        className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors disabled:opacity-40"
+      >
+        {isHost ? 'Entrar agora' : 'Pedir para entrar'}
+      </button>
+    </div>
+  )
+}
+
 // ── Permissão de câmera/microfone ──────────────────────────────────────────────
 
 function PermissionGate({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<'requesting' | 'granted' | 'error'>('requesting')
+  const [state, setState] = useState<'idle' | 'requesting' | 'granted' | 'error'>('idle')
   const [errName, setErrName] = useState('')
+  const [diag, setDiag] = useState('')
   const [skipped, setSkipped] = useState(false)
 
-  const request = async () => {
-    setState('requesting'); setErrName('')
-    // Contexto inseguro? (HTTP fora de localhost) — nem adianta pedir
-    const insecure = typeof window !== 'undefined'
-      && window.location.protocol !== 'https:'
-      && !['localhost', '127.0.0.1'].includes(window.location.hostname)
-    if (insecure) { setErrName('SecureContext'); setState('error'); return }
+  const buildDiag = async (errLine: string) => {
+    const parts: string[] = []
+    parts.push(`url: ${window.location.protocol}//${window.location.host}`)
+    parts.push(`mediaDevices: ${navigator.mediaDevices ? 'sim' : 'NAO'}`)
+    parts.push(`getUserMedia: ${typeof navigator.mediaDevices?.getUserMedia === 'function' ? 'sim' : 'NAO'}`)
+    try {
+      const devs = await navigator.mediaDevices.enumerateDevices()
+      parts.push(`cams: ${devs.filter(d => d.kind === 'videoinput').length} | mics: ${devs.filter(d => d.kind === 'audioinput').length}`)
+    } catch { parts.push('enumerateDevices: falhou') }
+    try {
+      const cam = await navigator.permissions.query({ name: 'camera' as PermissionName })
+      const mic = await navigator.permissions.query({ name: 'microphone' as PermissionName })
+      parts.push(`perm camera: ${cam.state} | mic: ${mic.state}`)
+    } catch { parts.push('permissions API: indisponivel') }
+    parts.push(`erro: ${errLine}`)
+    setDiag(parts.join('\n'))
+  }
 
+  const request = async () => {
+    setState('requesting'); setErrName(''); setDiag('')
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setErrName('NoMediaDevices'); await buildDiag('navigator.mediaDevices.getUserMedia indisponivel'); setState('error'); return
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
       stream.getTracks().forEach(t => t.stop())
       setState('granted')
     } catch (e) {
-      setErrName((e as { name?: string })?.name || 'Error')
+      const err = e as { name?: string; message?: string }
+      setErrName(err?.name || 'Error')
+      await buildDiag(`${err?.name || 'Error'}: ${err?.message || ''}`)
       setState('error')
     }
   }
-
-  useEffect(() => { request() }, [])
-
-  if (state === 'granted' || skipped) return <>{children}</>
 
   const messages: Record<string, { title: string; hint: string }> = {
     NotAllowedError: {
@@ -256,137 +571,763 @@ function PermissionGate({ children }: { children: React.ReactNode }) {
       title: 'Conexão não segura',
       hint: 'Câmera/microfone só funcionam em HTTPS. Acesse por https://crm.startsette.com.',
     },
+    NoMediaDevices: {
+      title: 'Navegador sem acesso a mídia',
+      hint: 'O navegador não expôs a API de câmera/microfone (geralmente contexto não seguro). Tente por HTTPS.',
+    },
   }
   const info = messages[errName] || { title: 'Não foi possível acessar', hint: `Erro: ${errName}. Verifique as permissões do navegador.` }
 
+  const showChildren = state === 'granted' || skipped
+
   return (
-    <div className="p-6 bg-[#111118]">
-      {state === 'requesting' ? (
-        <div className="flex flex-col items-center gap-3 py-8 text-center">
-          <div className="flex gap-2">
-            <Camera className="w-6 h-6 text-blue-400" />
-            <Mic className="w-6 h-6 text-blue-400" />
-          </div>
-          <p className="text-white font-medium">Pedindo acesso à câmera e microfone...</p>
-          <p className="text-sm text-slate-500">Clique em <strong className="text-slate-300">Permitir</strong> quando o navegador perguntar.</p>
-          <Loader2 className="w-5 h-5 animate-spin text-slate-600 mt-1" />
-        </div>
-      ) : (
-        <div className="flex flex-col items-center gap-3 py-4 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-            <AlertTriangle className="w-6 h-6 text-amber-400" />
-          </div>
-          <p className="text-white font-medium">{info.title}</p>
-          <p className="text-sm text-slate-400 leading-relaxed max-w-sm">{info.hint}</p>
-          <div className="flex flex-col gap-2 w-full max-w-xs mt-2">
+    <AnimatePresence mode="wait" initial={false}>
+      {showChildren ? (
+        <motion.div
+          key="granted"
+          initial={{ opacity: 0, y: 12, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        >
+          {children}
+        </motion.div>
+      ) : state === 'idle' ? (
+        <motion.div
+          key="idle"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, y: -12, transition: { duration: 0.18 } }}
+          transition={{ duration: 0.2 }}
+          className="p-6 bg-[#111118]"
+        >
+          <div className="flex flex-col items-center gap-3 py-6 text-center">
+            <div className="flex gap-2.5">
+              <div className="w-11 h-11 rounded-xl bg-blue-500/10 border border-white/10 flex items-center justify-center">
+                <Camera className="w-5 h-5 text-blue-400" />
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-blue-500/10 border border-white/10 flex items-center justify-center">
+                <Mic className="w-5 h-5 text-blue-400" />
+              </div>
+            </div>
+            <p className="text-white font-medium">Câmera e microfone</p>
+            <p className="text-sm text-slate-500 max-w-xs">Para entrar na reunião, libere o acesso. O navegador vai pedir sua permissão.</p>
             <button
               onClick={request}
-              className="h-10 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
+              className="h-11 px-6 mt-1 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
             >
-              <RefreshCw className="w-4 h-4" /> Tentar novamente
+              Ativar câmera e microfone
             </button>
-            {errName !== 'SecureContext' && (
-              <button
-                onClick={() => setSkipped(true)}
-                className="h-10 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 text-sm font-medium transition-colors"
-              >
-                Entrar sem câmera/microfone
-              </button>
-            )}
+            <button
+              onClick={() => setSkipped(true)}
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors mt-1"
+            >
+              Entrar sem câmera/microfone
+            </button>
           </div>
-        </div>
+        </motion.div>
+      ) : (
+        <motion.div
+          key={state}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -12, transition: { duration: 0.18 } }}
+          transition={{ duration: 0.2 }}
+          className="p-6 bg-[#111118]"
+        >
+          {state === 'requesting' ? (
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <div className="flex gap-2">
+                <Camera className="w-6 h-6 text-blue-400" />
+                <Mic className="w-6 h-6 text-blue-400" />
+              </div>
+              <p className="text-white font-medium">Pedindo acesso à câmera e microfone...</p>
+              <p className="text-sm text-slate-500">Clique em <strong className="text-slate-300">Permitir</strong> quando o navegador perguntar.</p>
+              <Loader2 className="w-5 h-5 animate-spin text-slate-600 mt-1" />
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3 py-4 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-amber-400" />
+              </div>
+              <p className="text-white font-medium">{info.title}</p>
+              <p className="text-sm text-slate-400 leading-relaxed max-w-sm">{info.hint}</p>
+              {diag && (
+                <pre className="text-[10px] text-slate-500 bg-black/40 border border-white/10 rounded-lg p-2.5 mt-1 max-w-sm w-full text-left whitespace-pre-wrap leading-relaxed">{diag}</pre>
+              )}
+              <div className="flex flex-col gap-2 w-full max-w-xs mt-2">
+                <button
+                  onClick={request}
+                  className="h-10 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" /> Tentar novamente
+                </button>
+                {errName !== 'SecureContext' && (
+                  <button
+                    onClick={() => setSkipped(true)}
+                    className="h-10 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 text-sm font-medium transition-colors"
+                  >
+                    Entrar sem câmera/microfone
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </motion.div>
       )}
-    </div>
+    </AnimatePresence>
   )
 }
 
 // ── Dentro da sala ───────────────────────────────────────────────────────────
 
+const ROOM_CSS = `
+/* Área de vídeo contida e centralizada (estilo Meet) */
+.lk-grid-layout {
+  padding: 20px;
+  gap: 14px;
+  height: 100%;
+  align-content: center;
+  justify-content: center;
+  place-items: center;
+}
+.lk-grid-layout .lk-participant-tile {
+  border-radius: 18px;
+  overflow: hidden;
+  width: 100%;
+  max-width: 1080px;
+  max-height: calc(100dvh - 190px);
+  aspect-ratio: 16 / 9;
+  margin: auto;
+  align-self: center;
+  justify-self: center;
+  background: #16161d;
+}
+.lk-focus-layout .lk-participant-tile { border-radius: 18px; overflow: hidden; }
+/* Anel ao redor de quem está falando */
+.lk-participant-tile[data-lk-speaking="true"] {
+  box-shadow: 0 0 0 3px #3b82f6, 0 0 22px 2px rgba(59,130,246,0.45);
+  transition: box-shadow 0.15s ease;
+}
+`
+
 function RoomShell({ title, code, isHost }: { title: string; code: string; isHost: boolean }) {
+  const participants = useParticipants()
+  const [chatOpen, setChatOpen] = useState(false)
+  const [micMode, setMicModeState] = useState<MicMode>(() => (typeof window !== 'undefined' ? loadMic() : { mode: 'open', code: 'Space', label: 'Espaço' }))
+  const setMic = (m: MicMode) => { setMicModeState(m); saveMic(m) }
+  const [reactions, setReactions] = useState<{ id: number; emoji: string; x: number }[]>([])
+
+  const pushReaction = useCallback((emoji: string) => {
+    const id = Date.now() + Math.random()
+    const x = 12 + Math.random() * 76
+    setReactions(r => [...r, { id, emoji, x }])
+    setTimeout(() => setReactions(r => r.filter(z => z.id !== id)), 3600)
+  }, [])
+
+  const { send } = useDataChannel('reactions', (msg) => {
+    try { const d = JSON.parse(new TextDecoder().decode(msg.payload)); if (d?.emoji) pushReaction(d.emoji) } catch { /* ignore */ }
+  })
+  const sendReaction = (emoji: string) => {
+    pushReaction(emoji)
+    try { send(new TextEncoder().encode(JSON.stringify({ emoji })), {}) } catch { /* ignore */ }
+  }
+
+  const tracks = useTracks(
+    [{ source: Track.Source.Camera, withPlaceholder: true }, { source: Track.Source.ScreenShare, withPlaceholder: false }],
+    { onlySubscribed: false },
+  )
+
   return (
-    <div className="relative flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10 bg-[#111118] shrink-0">
+    <div className="relative flex flex-col h-full bg-[#171717]">
+      <style>{ROOM_CSS}</style>
+
+      {/* Top bar cinza */}
+      <div className="flex items-center justify-between px-4 py-2.5 shrink-0 bg-[#171717] border-b border-white/10">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
-            <Video className="w-4 h-4 text-white" />
+          <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+            <Video className="w-4 h-4 text-slate-200" />
           </div>
           <span className="text-sm font-medium text-white truncate">{title}</span>
         </div>
-        <EffectsButton />
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-slate-300">
+          <Users className="w-3.5 h-3.5" /> {participants.length}
+        </div>
       </div>
 
       {isHost && <HostLobby code={code} />}
+      <PushToTalk mic={micMode} />
 
-      <div className="flex-1 min-h-0">
-        <VideoConference />
+      {/* Reações flutuantes */}
+      <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
+        <AnimatePresence>
+          {reactions.map(r => (
+            <motion.div
+              key={r.id}
+              initial={{ opacity: 0, y: 0, scale: 0.5 }}
+              animate={{ opacity: 1, y: -340, scale: 1.3 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 3.4, ease: 'easeOut' }}
+              className="absolute bottom-28 text-5xl select-none"
+              style={{ left: `${r.x}%` }}
+            >
+              {r.emoji}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* Vídeo + chat */}
+      <div className="flex-1 min-h-0 flex">
+        <div className="flex-1 min-h-0">
+          <GridLayout tracks={tracks}>
+            <ParticipantTile />
+          </GridLayout>
+        </div>
+        <AnimatePresence>
+          {chatOpen && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 320, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              className="border-l border-white/10 bg-[#171717] overflow-hidden shrink-0"
+            >
+              <motion.div
+                initial={{ x: 40, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 40, opacity: 0 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+                className="w-80 h-full"
+              >
+                <CustomChat code={code} />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <RoomAudioRenderer />
+      <ControlBar
+        code={code}
+        micMode={micMode}
+        setMic={setMic}
+        chatOpen={chatOpen}
+        onToggleChat={() => setChatOpen(o => !o)}
+        onReact={sendReaction}
+      />
+    </div>
+  )
+}
+
+function isTypingTarget() {
+  const el = document.activeElement
+  if (!el) return false
+  const tag = el.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || (el as HTMLElement).isContentEditable
+}
+
+interface Msg { ts: number; identity: string; name: string; text: string }
+
+function CustomChat({ code }: { code: string }) {
+  const { localParticipant } = useLocalParticipant()
+  const { chatMessages, send, isSending } = useChat()
+  const [text, setText] = useState('')
+  const [typers, setTypers] = useState<Record<string, string>>({})
+  const [messages, setMessages] = useState<Msg[]>([])
+  const seen = useRef<Set<string>>(new Set())
+  const listRef = useRef<HTMLDivElement>(null)
+
+  const keyOf = (m: Msg) => `${m.ts}_${m.identity}_${m.text}`
+
+  // histórico do banco (persiste ao sair e voltar)
+  useEffect(() => {
+    fetch(`/api/meetings/${code}/messages`)
+      .then(r => r.json())
+      .then((rows: Array<{ sender_id: string; sender_name: string; text: string; created_at: string }>) => {
+        if (!Array.isArray(rows)) return
+        const items: Msg[] = rows.map(r => ({ ts: new Date(r.created_at).getTime(), identity: r.sender_id || '', name: r.sender_name || 'Participante', text: r.text }))
+        setMessages(prev => {
+          const add = items.filter(it => !seen.current.has(keyOf(it)))
+          add.forEach(it => seen.current.add(keyOf(it)))
+          return [...add, ...prev].sort((a, b) => a.ts - b.ts)
+        })
+      })
+      .catch(() => {})
+  }, [code])
+
+  // mensagens ao vivo (LiveKit) → mescla sem duplicar
+  useEffect(() => {
+    const add: Msg[] = []
+    for (const m of chatMessages) {
+      const it: Msg = { ts: m.timestamp, identity: m.from?.identity || '', name: m.from?.name || m.from?.identity || 'Participante', text: m.message }
+      const k = keyOf(it)
+      if (!seen.current.has(k)) { seen.current.add(k); add.push(it) }
+    }
+    if (add.length) setMessages(prev => [...prev, ...add].sort((a, b) => a.ts - b.ts))
+  }, [chatMessages])
+  const typingTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const lastSentRef = useRef(0)
+  const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const { send: sendTyping } = useDataChannel('typing', (msg) => {
+    try {
+      const d = JSON.parse(new TextDecoder().decode(msg.payload))
+      const id = msg.from?.identity || 'x'
+      if (d.typing) {
+        setTypers(p => ({ ...p, [id]: d.name || 'Alguém' }))
+        clearTimeout(typingTimers.current[id])
+        typingTimers.current[id] = setTimeout(() => setTypers(p => { const n = { ...p }; delete n[id]; return n }), 4000)
+      } else {
+        setTypers(p => { const n = { ...p }; delete n[id]; return n })
+      }
+    } catch { /* ignore */ }
+  })
+
+  const broadcastTyping = (typing: boolean) => {
+    try { sendTyping(new TextEncoder().encode(JSON.stringify({ typing, name: localParticipant.name || 'Convidado' })), {}) } catch { /* ignore */ }
+  }
+
+  const onChange = (v: string) => {
+    setText(v)
+    const now = Date.now()
+    if (v && now - lastSentRef.current > 1500) { lastSentRef.current = now; broadcastTyping(true) }
+    if (stopTimer.current) clearTimeout(stopTimer.current)
+    stopTimer.current = setTimeout(() => broadcastTyping(false), 2500)
+  }
+
+  const submit = async () => {
+    const t = text.trim()
+    if (!t || isSending) return
+    setText('')
+    broadcastTyping(false)
+    if (stopTimer.current) clearTimeout(stopTimer.current)
+    try { await send(t) } catch { /* ignore */ }
+    // persiste no banco (fica salvo ao sair e voltar)
+    fetch(`/api/meetings/${code}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: localParticipant.name, identity: localParticipant.identity, text: t }),
+    }).catch(() => {})
+  }
+
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
+  }, [messages])
+
+  const typingNames = Object.values(typers)
+
+  return (
+    <div className="flex flex-col h-full bg-[#171717]">
+      <div className="px-4 py-3 border-b border-white/10 shrink-0">
+        <span className="text-sm font-semibold text-white">Mensagens</span>
+      </div>
+
+      <div ref={listRef} className="flex-1 overflow-y-auto p-3 space-y-2.5">
+        {messages.length === 0 && (
+          <p className="text-center text-xs text-slate-600 mt-8">Nenhuma mensagem ainda.<br />Diga olá! 👋</p>
+        )}
+        {messages.map((m, i) => {
+          const mine = m.identity === localParticipant.identity
+          return (
+            <div key={`${m.ts}-${i}`} className={cn('flex flex-col max-w-[85%]', mine ? 'items-end ml-auto' : 'items-start')}>
+              {!mine && <span className="text-[10px] text-slate-500 mb-0.5 px-1">{m.name}</span>}
+              <div className={cn('px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words', mine ? 'bg-blue-600 text-white rounded-br-md' : 'bg-white/8 text-slate-100 rounded-bl-md')}>
+                {m.text}
+              </div>
+              <span className="text-[9px] text-slate-600 mt-0.5 px-1">{new Date(m.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      <AnimatePresence>
+        {typingNames.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="px-4 py-1.5 text-[11px] text-slate-400 flex items-center gap-2 overflow-hidden"
+          >
+            <span className="flex gap-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+            </span>
+            {typingNames.length === 1 ? `${typingNames[0]} está escrevendo...` : `${typingNames.length} pessoas escrevendo...`}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="p-3 border-t border-white/10 shrink-0">
+        <div className="flex gap-2">
+          <input
+            value={text}
+            onChange={e => onChange(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submit() } }}
+            placeholder="Escreva uma mensagem..."
+            className="flex-1 h-10 rounded-xl bg-white/5 border border-white/10 px-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/50"
+          />
+          <button onClick={submit} disabled={!text.trim() || isSending} className="w-10 h-10 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white flex items-center justify-center shrink-0 transition-colors">
+            <Send className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
-function EffectsButton() {
+function PushToTalk({ mic }: { mic: MicMode }) {
   const { localParticipant } = useLocalParticipant()
-  const [open, setOpen] = useState(false)
-  const [active, setActive] = useState<string>('none')
-  const [busy, setBusy] = useState(false)
+  const [talking, setTalking] = useState(false)
 
-  const apply = async (type: 'none' | 'blur' | 'image', url?: string) => {
+  useEffect(() => {
+    if (mic.mode !== 'ptt') return
+    let held = false
+    localParticipant.setMicrophoneEnabled(false).catch(() => {})
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== mic.code || held || isTypingTarget()) return
+      held = true
+      setTalking(true)
+      localParticipant.setMicrophoneEnabled(true).catch(() => {})
+      if (mic.code === 'Space') e.preventDefault()
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.code !== mic.code || !held) return
+      held = false
+      setTalking(false)
+      localParticipant.setMicrophoneEnabled(false).catch(() => {})
+    }
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+    }
+  }, [localParticipant, mic])
+
+  if (mic.mode !== 'ptt') return null
+
+  return (
+    <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40 pointer-events-none">
+      <div className={cn(
+        'flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium shadow-lg transition-colors',
+        talking ? 'bg-blue-600 border-blue-500 text-white' : 'bg-[#1c1c24]/90 border-white/10 text-slate-300',
+      )}>
+        <Mic className="w-4 h-4" />
+        {talking ? 'Falando...' : <>Segure <kbd className="px-1.5 py-0.5 rounded bg-white/15 text-white text-[11px] font-mono">{mic.label}</kbd> para falar</>}
+      </div>
+    </div>
+  )
+}
+
+const BG_KEY = 'startsette-meeting-bg'
+type SavedBg = { type: 'none' | 'blur' | 'image'; value?: string; radius?: number }
+const DEFAULT_BLUR = 15
+// % (0-100) -> raio do desfoque (3 = leve, 60 = muito fosco)
+const pctToRadius = (pct: number) => Math.max(3, Math.round((pct / 100) * 60))
+const radiusToPct = (r: number) => Math.round((r / 60) * 100)
+function loadBg(): SavedBg {
+  try { const s = localStorage.getItem(BG_KEY); if (s) return JSON.parse(s) } catch { /* ignore */ }
+  return { type: 'none' }
+}
+function saveBg(b: SavedBg) { try { localStorage.setItem(BG_KEY, JSON.stringify(b)) } catch { /* ignore */ } }
+
+// Modo do microfone: aberto (sempre) ou push-to-talk (apertar pra falar)
+const MIC_KEY = 'startsette-mic-mode'
+type MicMode = { mode: 'open' | 'ptt'; code: string; label: string }
+function loadMic(): MicMode {
+  try { const s = localStorage.getItem(MIC_KEY); if (s) return JSON.parse(s) } catch { /* ignore */ }
+  return { mode: 'open', code: 'Space', label: 'Espaço' }
+}
+function saveMic(m: MicMode) { try { localStorage.setItem(MIC_KEY, JSON.stringify(m)) } catch { /* ignore */ } }
+function keyLabel(code: string): string {
+  if (code === 'Space') return 'Espaço'
+  if (code.startsWith('Key')) return code.slice(3)
+  if (code.startsWith('Digit')) return code.slice(5)
+  if (code.startsWith('Arrow')) return code.slice(5)
+  if (code.startsWith('Control')) return 'Ctrl'
+  if (code.startsWith('Shift')) return 'Shift'
+  if (code.startsWith('Alt')) return 'Alt'
+  return code
+}
+
+// Qualidade do compartilhamento de tela (resolução + fps + bitrate)
+const SCREENQ_KEY = 'startsette-screen-quality'
+type ScreenQ = { label: string; w: number; h: number; fps: number; bitrate: number }
+const SCREEN_PRESETS: ScreenQ[] = [
+  { label: '1080p · 60fps', w: 1920, h: 1080, fps: 60, bitrate: 6_000_000 },
+  { label: '1080p · 30fps', w: 1920, h: 1080, fps: 30, bitrate: 3_000_000 },
+  { label: '720p · 60fps', w: 1280, h: 720, fps: 60, bitrate: 3_500_000 },
+  { label: '720p · 30fps', w: 1280, h: 720, fps: 30, bitrate: 2_000_000 },
+]
+function loadScreenQ(): ScreenQ {
+  try { const s = localStorage.getItem(SCREENQ_KEY); if (s) return JSON.parse(s) } catch { /* ignore */ }
+  return SCREEN_PRESETS[1] // 1080p · 30fps (bom p/ apresentação)
+}
+function saveScreenQ(q: ScreenQ) { try { localStorage.setItem(SCREENQ_KEY, JSON.stringify(q)) } catch { /* ignore */ } }
+
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '🎉', '👏', '🔥', '🙌']
+
+function ControlBar({ code, micMode, setMic, chatOpen, onToggleChat, onReact }: {
+  code: string
+  micMode: MicMode
+  setMic: (m: MicMode) => void
+  chatOpen: boolean
+  onToggleChat: () => void
+  onReact: (e: string) => void
+}) {
+  const room = useRoomContext()
+  const { localParticipant } = useLocalParticipant()
+  const [highlighted, setHighlighted] = useState(false)
+  const highlight = () => {
+    fetch(`/api/meetings/${code}/highlights`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ author: localParticipant.name || 'Participante', label: '' }),
+    }).catch(() => {})
+    setHighlighted(true); setTimeout(() => setHighlighted(false), 1500)
+  }
+  const micTgl = useTrackToggle({ source: Track.Source.Microphone })
+  const camTgl = useTrackToggle({ source: Track.Source.Camera })
+  const screenTgl = useTrackToggle({ source: Track.Source.ScreenShare })
+  const micSel = useMediaDeviceSelect({ kind: 'audioinput' })
+  const camSel = useMediaDeviceSelect({ kind: 'videoinput' })
+  const [menu, setMenu] = useState<'none' | 'mic' | 'cam' | 'react' | 'screen'>('none')
+  const [capturing, setCapturing] = useState(false)
+  const [screenQ, setScreenQState] = useState<ScreenQ>(() => (typeof window !== 'undefined' ? loadScreenQ() : SCREEN_PRESETS[1]))
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  const initial = typeof window !== 'undefined' ? loadBg() : { type: 'none' as const }
+  const [bgActive, setBgActive] = useState<string>(initial.type === 'image' ? (initial.value || 'none') : initial.type)
+  const [customImg, setCustomImg] = useState<string>(initial.type === 'image' && initial.value?.startsWith('data:') ? initial.value : '')
+  const [blurRadius, setBlurRadius] = useState<number>(initial.type === 'blur' && initial.radius ? initial.radius : DEFAULT_BLUR)
+  const [busy, setBusy] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const appliedRef = useRef(false)
+
+  const getCamTrack = () => localParticipant.getTrackPublication(Track.Source.Camera)?.track
+
+  const applyBg = async (type: 'none' | 'blur' | 'image', url?: string, persist = true, radius?: number) => {
     if (busy) return
     setBusy(true)
     try {
-      const pub = localParticipant.getTrackPublication(Track.Source.Camera)
-      const track = pub?.track
+      const track = getCamTrack()
       if (!track) { setBusy(false); return }
-      if (type === 'none') {
-        await track.stopProcessor()
-        setActive('none')
-      } else if (type === 'blur') {
+      if (type === 'none') { await track.stopProcessor(); setBgActive('none'); if (persist) saveBg({ type: 'none' }) }
+      else if (type === 'blur') {
+        const r = radius ?? blurRadius
         const { BackgroundBlur } = await import('@livekit/track-processors')
-        await track.setProcessor(BackgroundBlur(15))
-        setActive('blur')
+        await track.setProcessor(BackgroundBlur(r, SEG_OPTS)); setBgActive('blur'); if (persist) saveBg({ type: 'blur', radius: r })
       } else if (type === 'image' && url) {
         const { VirtualBackground } = await import('@livekit/track-processors')
-        await track.setProcessor(VirtualBackground(url))
-        setActive(url)
+        await track.setProcessor(VirtualBackground(url, SEG_OPTS)); setBgActive(url); if (persist) saveBg({ type: 'image', value: url })
       }
-    } catch { /* ignora */ } finally { setBusy(false) }
+    } catch { /* ignore */ } finally { setBusy(false) }
   }
 
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
-      >
-        <Sparkles className="w-3.5 h-3.5" /> Efeitos de fundo
-      </button>
+  useEffect(() => {
+    if (appliedRef.current) return
+    const saved = loadBg()
+    if (saved.type === 'none') { appliedRef.current = true; return }
+    let tries = 0
+    const iv = setInterval(() => {
+      tries++
+      if (getCamTrack()) {
+        clearInterval(iv); appliedRef.current = true
+        if (saved.type === 'blur') applyBg('blur', undefined, false)
+        else if (saved.type === 'image' && saved.value) applyBg('image', saved.value, false)
+      } else if (tries > 60) clearInterval(iv)
+    }, 500)
+    return () => clearInterval(iv)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [localParticipant])
 
-      {open && (
-        <div className="absolute top-10 right-0 z-50 w-72 rounded-2xl border border-white/10 bg-[#1c1c24] shadow-2xl shadow-black/50 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-white">Plano de fundo</span>
-            {busy && <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />}
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <EffectTile selected={active === 'none'} onClick={() => apply('none')}>
-              <CircleOff className="w-5 h-5 text-slate-300" />
-              <span className="text-[10px] text-slate-400 mt-1">Nenhum</span>
-            </EffectTile>
-            <EffectTile selected={active === 'blur'} onClick={() => apply('blur')}>
-              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-slate-400/60 to-slate-600/60 blur-[2px]" />
-              <span className="text-[10px] text-slate-400 mt-1">Borrado</span>
-            </EffectTile>
-            {BG_IMAGES.map(img => (
-              <EffectTile key={img.url} selected={active === img.url} onClick={() => apply('image', img.url)}>
-                <img src={img.url} alt={img.label} className="absolute inset-0 w-full h-full object-cover rounded-lg" />
-              </EffectTile>
-            ))}
-          </div>
-          <p className="text-[10px] text-slate-600 mt-2 flex items-center gap-1">
-            <ImageIcon className="w-3 h-3" /> Ligue a câmera para aplicar
-          </p>
+  const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; if (!f) return
+    const r = new FileReader(); r.onload = () => { const d = r.result as string; setCustomImg(d); applyBg('image', d) }; r.readAsDataURL(f)
+  }
+
+  useEffect(() => {
+    if (menu === 'none') return
+    const h = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setMenu('none') }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [menu])
+
+  useEffect(() => {
+    if (!capturing) return
+    const h = (e: KeyboardEvent) => { e.preventDefault(); setMic({ mode: 'ptt', code: e.code, label: keyLabel(e.code) }); setCapturing(false) }
+    window.addEventListener('keydown', h, { once: true })
+    return () => window.removeEventListener('keydown', h)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capturing])
+
+  const pickMode = (mode: 'open' | 'ptt') => {
+    setMic({ ...micMode, mode })
+    if (mode === 'open') localParticipant.setMicrophoneEnabled(true).catch(() => {})
+  }
+
+  const startScreen = (q: ScreenQ) => {
+    localParticipant.setScreenShareEnabled(
+      true,
+      { resolution: { width: q.w, height: q.h, frameRate: q.fps }, contentHint: (q.fps >= 60 ? 'motion' : 'detail') as 'motion' | 'detail' },
+      { videoEncoding: { maxFramerate: q.fps, maxBitrate: q.bitrate } },
+    ).catch(() => {})
+  }
+  const toggleScreen = () => {
+    if (screenTgl.enabled) localParticipant.setScreenShareEnabled(false).catch(() => {})
+    else startScreen(screenQ)
+  }
+  const pickScreenQ = (q: ScreenQ) => {
+    setScreenQState(q); saveScreenQ(q)
+    if (screenTgl.enabled) {
+      localParticipant.setScreenShareEnabled(false).catch(() => {})
+      setTimeout(() => startScreen(q), 300)
+    }
+  }
+
+  const menuCls = 'absolute bottom-full mb-2 rounded-xl border border-white/10 bg-[#1c1c24] shadow-2xl shadow-black/50 p-2 z-50'
+  const anim = { initial: { opacity: 0, y: 8, scale: 0.97 }, animate: { opacity: 1, y: 0, scale: 1 }, exit: { opacity: 0, y: 8, scale: 0.97 }, transition: { duration: 0.16, ease: 'easeOut' as const } }
+
+  return (
+    <div ref={wrapRef} className="relative shrink-0 bg-[#171717] border-t border-white/10">
+      <div className="flex items-center justify-center gap-2 px-4 py-3 flex-wrap">
+
+        {/* Microfone */}
+        <div className="relative flex">
+          <button onClick={() => micTgl.toggle()} className={cn('flex items-center gap-2 h-10 pl-3 pr-2.5 rounded-l-xl text-sm border border-r-0 transition-colors', micTgl.enabled ? 'bg-white/5 border-white/10 text-white hover:bg-white/10' : 'bg-red-500/15 border-red-500/20 text-red-300')}>
+            {micTgl.enabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+            <span className="hidden sm:inline">Microfone</span>
+          </button>
+          <button onClick={() => setMenu(m => m === 'mic' ? 'none' : 'mic')} className="w-8 h-10 rounded-r-xl border border-white/10 bg-white/5 text-slate-400 hover:text-white flex items-center justify-center"><ChevronUp className="w-4 h-4" /></button>
+          <AnimatePresence>
+            {menu === 'mic' && (
+              <motion.div {...anim} style={{ transformOrigin: 'bottom left' }} className={cn(menuCls, 'left-0 w-64')}>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500 px-2 py-1">Microfone</p>
+                {micSel.devices.map(d => (
+                  <button key={d.deviceId} onClick={() => micSel.setActiveMediaDevice(d.deviceId)} className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-sm flex items-center gap-2', micSel.activeDeviceId === d.deviceId ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5')}>
+                    {micSel.activeDeviceId === d.deviceId && <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+                    <span className="truncate">{d.label || 'Microfone'}</span>
+                  </button>
+                ))}
+                <div className="border-t border-white/10 mt-1.5 pt-1.5">
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500 px-2 pb-1">Modo do microfone</p>
+                  <button onClick={() => pickMode('open')} className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-sm flex items-center gap-2', micMode.mode === 'open' ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5')}>
+                    {micMode.mode === 'open' && <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />}<span>Falar automaticamente</span>
+                  </button>
+                  <button onClick={() => pickMode('ptt')} className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-sm flex items-center gap-2', micMode.mode === 'ptt' ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5')}>
+                    {micMode.mode === 'ptt' && <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />}<span>Apertar para falar</span>
+                  </button>
+                  {micMode.mode === 'ptt' && (
+                    <div className="flex items-center justify-between px-2.5 py-1.5 mt-1">
+                      <span className="text-[11px] text-slate-400">Tecla: <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-white text-[10px] font-mono">{micMode.label}</kbd></span>
+                      <button onClick={() => setCapturing(true)} className="text-[11px] text-blue-400 hover:text-blue-300">{capturing ? 'Pressione...' : 'Alterar'}</button>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-      )}
+
+        {/* Câmera */}
+        <div className="relative flex">
+          <button onClick={() => camTgl.toggle()} className={cn('flex items-center gap-2 h-10 pl-3 pr-2.5 rounded-l-xl text-sm border border-r-0 transition-colors', camTgl.enabled ? 'bg-white/5 border-white/10 text-white hover:bg-white/10' : 'bg-red-500/15 border-red-500/20 text-red-300')}>
+            {camTgl.enabled ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
+            <span className="hidden sm:inline">Câmera</span>
+          </button>
+          <button onClick={() => setMenu(m => m === 'cam' ? 'none' : 'cam')} className="w-8 h-10 rounded-r-xl border border-white/10 bg-white/5 text-slate-400 hover:text-white flex items-center justify-center"><ChevronUp className="w-4 h-4" /></button>
+          <AnimatePresence>
+            {menu === 'cam' && (
+              <motion.div {...anim} style={{ transformOrigin: 'bottom left' }} className={cn(menuCls, 'left-0 w-72')}>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500 px-2 py-1">Câmera</p>
+                {camSel.devices.map(d => (
+                  <button key={d.deviceId} onClick={() => camSel.setActiveMediaDevice(d.deviceId)} className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-sm flex items-center gap-2', camSel.activeDeviceId === d.deviceId ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5')}>
+                    {camSel.activeDeviceId === d.deviceId && <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+                    <span className="truncate">{d.label || 'Câmera'}</span>
+                  </button>
+                ))}
+                <div className="border-t border-white/10 mt-1.5 pt-1.5">
+                  <div className="flex items-center justify-between px-1 pb-1.5">
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500">Plano de fundo</p>
+                    {busy && <Loader2 className="w-3 h-3 animate-spin text-slate-400" />}
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    <EffectTile selected={bgActive === 'none'} onClick={() => applyBg('none')}><CircleOff className="w-4 h-4 text-slate-300" /><span className="text-[9px] text-slate-400 mt-0.5">Nenhum</span></EffectTile>
+                    <EffectTile selected={bgActive === 'blur'} onClick={() => applyBg('blur')}><div className="w-5 h-5 rounded-full bg-gradient-to-br from-slate-400/60 to-slate-600/60 blur-[2px]" /></EffectTile>
+                    {BG_IMAGES.map(img => (
+                      <EffectTile key={img.url} selected={bgActive === img.url} onClick={() => applyBg('image', img.url)}><img src={img.url} alt={img.label} className="absolute inset-0 w-full h-full object-cover rounded-lg" /></EffectTile>
+                    ))}
+                    {customImg && (<EffectTile selected={bgActive === customImg} onClick={() => applyBg('image', customImg)}><img src={customImg} alt="Sua imagem" className="absolute inset-0 w-full h-full object-cover rounded-lg" /></EffectTile>)}
+                    <EffectTile selected={false} onClick={() => fileRef.current?.click()}><ImageIcon className="w-4 h-4 text-slate-300" /><span className="text-[9px] text-slate-400 mt-0.5">Enviar</span></EffectTile>
+                  </div>
+                  <input ref={fileRef} type="file" accept="image/*" onChange={onPickFile} className="hidden" />
+                  {bgActive === 'blur' && (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between mb-1"><span className="text-[10px] text-slate-400">Intensidade</span><span className="text-[10px] font-medium text-white">{radiusToPct(blurRadius)}%</span></div>
+                      <input type="range" min={0} max={100} value={radiusToPct(blurRadius)} onChange={e => setBlurRadius(pctToRadius(Number(e.target.value)))} onPointerUp={() => applyBg('blur', undefined, true, blurRadius)} onKeyUp={() => applyBg('blur', undefined, true, blurRadius)} className="w-full accent-blue-500" />
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Compartilhar tela */}
+        <div className="relative flex">
+          <button onClick={toggleScreen} className={cn('flex items-center gap-2 h-10 pl-3 pr-2.5 rounded-l-xl text-sm border border-r-0 transition-colors', screenTgl.enabled ? 'bg-blue-600 border-blue-500 text-white' : 'bg-white/5 border-white/10 text-white hover:bg-white/10')}>
+            <MonitorUp className="w-4 h-4" /><span className="hidden md:inline">Tela</span>
+          </button>
+          <button onClick={() => setMenu(m => m === 'screen' ? 'none' : 'screen')} className="w-8 h-10 rounded-r-xl border border-white/10 bg-white/5 text-slate-400 hover:text-white flex items-center justify-center"><ChevronUp className="w-4 h-4" /></button>
+          <AnimatePresence>
+            {menu === 'screen' && (
+              <motion.div {...anim} style={{ transformOrigin: 'bottom center' }} className={cn(menuCls, 'left-1/2 -translate-x-1/2 w-52')}>
+                <p className="text-[10px] uppercase tracking-wide text-slate-500 px-2 py-1">Qualidade da tela</p>
+                {SCREEN_PRESETS.map(p => {
+                  const sel = p.w === screenQ.w && p.h === screenQ.h && p.fps === screenQ.fps
+                  return (
+                    <button key={p.label} onClick={() => pickScreenQ(p)} className={cn('w-full text-left px-2.5 py-1.5 rounded-lg text-sm flex items-center gap-2', sel ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5')}>
+                      {sel && <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />}<span>{p.label}</span>
+                    </button>
+                  )
+                })}
+                <p className="text-[10px] text-slate-600 px-2 pt-1 leading-snug">60fps em 1080p depende do seu PC e do conteúdo.</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Reações */}
+        <div className="relative">
+          <button onClick={() => setMenu(m => m === 'react' ? 'none' : 'react')} className="flex items-center gap-2 h-10 px-3 rounded-xl text-sm border bg-white/5 border-white/10 text-white hover:bg-white/10">
+            <Smile className="w-4 h-4" /><span className="hidden md:inline">Reagir</span>
+          </button>
+          <AnimatePresence>
+            {menu === 'react' && (
+              <motion.div {...anim} style={{ transformOrigin: 'bottom center' }} className={cn(menuCls, 'left-1/2 -translate-x-1/2 flex gap-1')}>
+                {REACTION_EMOJIS.map(e => (
+                  <button key={e} onClick={() => { onReact(e); setMenu('none') }} className="w-9 h-9 rounded-lg hover:bg-white/10 text-xl flex items-center justify-center transition-colors">{e}</button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Destacar momento */}
+        <button onClick={highlight} title="Marcar um destaque deste momento" className={cn('flex items-center gap-2 h-10 px-3 rounded-xl text-sm border transition-colors', highlighted ? 'bg-amber-500 border-amber-400 text-white' : 'bg-white/5 border-white/10 text-white hover:bg-white/10')}>
+          <Star className="w-4 h-4" /><span className="hidden md:inline">{highlighted ? 'Marcado!' : 'Destacar'}</span>
+        </button>
+
+        {/* Chat */}
+        <button onClick={onToggleChat} className={cn('flex items-center gap-2 h-10 px-3 rounded-xl text-sm border transition-colors', chatOpen ? 'bg-blue-600 border-blue-500 text-white' : 'bg-white/5 border-white/10 text-white hover:bg-white/10')}>
+          <MessageSquare className="w-4 h-4" /><span className="hidden md:inline">Chat</span>
+        </button>
+
+        {/* Sair */}
+        <button onClick={() => room.disconnect()} className="flex items-center gap-2 h-10 px-3 rounded-xl text-sm bg-red-600 hover:bg-red-500 text-white transition-colors">
+          <PhoneOff className="w-4 h-4" /><span className="hidden md:inline">Sair</span>
+        </button>
+      </div>
     </div>
   )
 }

@@ -67,6 +67,29 @@ export function Topbar() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.isDemo])
 
+  // Carrega notificações reais do banco (uma vez)
+  const notifLoadedRef = useRef(false)
+  useEffect(() => {
+    if (!user || user.isDemo || notifLoadedRef.current) return
+    notifLoadedRef.current = true
+    fetch('/api/notifications')
+      .then((r) => r.json())
+      .then((rows: Array<{ id: string; title: string; description?: string; type?: Notification['type']; read: boolean; created_at: string; action_label?: string; action_href?: string }>) => {
+        if (!Array.isArray(rows)) return
+        rows.slice().reverse().forEach((n) => addNotification({
+          id: n.id,
+          title: n.title,
+          description: n.description || '',
+          type: n.type || 'info',
+          read: n.read,
+          createdAt: n.created_at,
+          action: n.action_href ? { label: n.action_label || 'Ver', href: n.action_href } : undefined,
+        }))
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
+
   // Bell open/close behaviour — uses a ref so it never fires on mount
   useEffect(() => {
     const justOpened = open && !wasOpenRef.current
@@ -85,6 +108,10 @@ export function Topbar() {
     if (justClosed) {
       // Mark everything as read when panel is closed — removes the badge
       markAllAsRead()
+      // Persiste a leitura no banco (usuários reais)
+      if (user && !user.isDemo) {
+        fetch('/api/notifications', { method: 'PATCH' }).catch(() => {})
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])

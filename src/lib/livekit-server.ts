@@ -55,6 +55,9 @@ export interface MeetingRow {
   active: boolean
   created_at: string
   expires_at: string
+  scheduled_at: string | null
+  transcript_status: string | null
+  summary: unknown | null
 }
 
 export async function getMeeting(code: string): Promise<MeetingRow | null> {
