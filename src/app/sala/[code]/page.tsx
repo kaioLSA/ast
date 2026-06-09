@@ -8,7 +8,7 @@ import {
 } from '@livekit/components-react'
 import { Track } from 'livekit-client'
 import '@livekit/components-styles'
-import { Loader2, Video, Sparkles, Check, X, Users, Image as ImageIcon, CircleOff } from 'lucide-react'
+import { Loader2, Video, Sparkles, Check, X, Users, Image as ImageIcon, CircleOff, Camera, Mic, AlertTriangle, RefreshCw } from 'lucide-react'
 
 const LIVEKIT_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL ?? ''
 
@@ -132,15 +132,17 @@ export default function SalaPage() {
           </p>
         </div>
         <div data-lk-theme="default" className="w-full max-w-md rounded-2xl overflow-hidden border border-white/10">
-          <PreJoin
-            defaults={{ username: ownerName || '', videoEnabled: true, audioEnabled: true }}
-            onSubmit={handlePreJoin}
-            joinLabel={isHost ? 'Entrar agora' : 'Pedir para entrar'}
-            micLabel="Microfone"
-            camLabel="Câmera"
-            userLabel="Seu nome"
-            persistUserChoices={false}
-          />
+          <PermissionGate>
+            <PreJoin
+              defaults={{ username: ownerName || '', videoEnabled: true, audioEnabled: true }}
+              onSubmit={handlePreJoin}
+              joinLabel={isHost ? 'Entrar agora' : 'Pedir para entrar'}
+              micLabel="Microfone"
+              camLabel="Câmera"
+              userLabel="Seu nome"
+              persistUserChoices={false}
+            />
+          </PermissionGate>
         </div>
       </div>
     )
@@ -204,6 +206,96 @@ function Brand({ className = '' }: { className?: string }) {
         <Video className="w-5 h-5 text-white" />
       </div>
       <span className="text-lg font-semibold text-white">Startsette · Reuniões</span>
+    </div>
+  )
+}
+
+// ── Permissão de câmera/microfone ──────────────────────────────────────────────
+
+function PermissionGate({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<'requesting' | 'granted' | 'error'>('requesting')
+  const [errName, setErrName] = useState('')
+  const [skipped, setSkipped] = useState(false)
+
+  const request = async () => {
+    setState('requesting'); setErrName('')
+    // Contexto inseguro? (HTTP fora de localhost) — nem adianta pedir
+    const insecure = typeof window !== 'undefined'
+      && window.location.protocol !== 'https:'
+      && !['localhost', '127.0.0.1'].includes(window.location.hostname)
+    if (insecure) { setErrName('SecureContext'); setState('error'); return }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+      stream.getTracks().forEach(t => t.stop())
+      setState('granted')
+    } catch (e) {
+      setErrName((e as { name?: string })?.name || 'Error')
+      setState('error')
+    }
+  }
+
+  useEffect(() => { request() }, [])
+
+  if (state === 'granted' || skipped) return <>{children}</>
+
+  const messages: Record<string, { title: string; hint: string }> = {
+    NotAllowedError: {
+      title: 'Permissão negada',
+      hint: 'Clique no ícone à esquerda do endereço (cadeado/câmera), defina Câmera e Microfone como "Permitir" e clique em Tentar novamente. No Opera: Configurações do site → Câmera/Microfone → Permitir.',
+    },
+    NotFoundError: {
+      title: 'Nenhuma câmera/microfone encontrado',
+      hint: 'Conecte uma câmera/microfone e tente novamente.',
+    },
+    NotReadableError: {
+      title: 'Dispositivo em uso ou bloqueado pelo sistema',
+      hint: 'Feche outros apps usando a câmera (OBS, Zoom, Meet) e verifique no Windows: Configurações → Privacidade e segurança → Câmera e Microfone → permita o acesso para apps de desktop / o Opera.',
+    },
+    SecureContext: {
+      title: 'Conexão não segura',
+      hint: 'Câmera/microfone só funcionam em HTTPS. Acesse por https://crm.startsette.com.',
+    },
+  }
+  const info = messages[errName] || { title: 'Não foi possível acessar', hint: `Erro: ${errName}. Verifique as permissões do navegador.` }
+
+  return (
+    <div className="p-6 bg-[#111118]">
+      {state === 'requesting' ? (
+        <div className="flex flex-col items-center gap-3 py-8 text-center">
+          <div className="flex gap-2">
+            <Camera className="w-6 h-6 text-blue-400" />
+            <Mic className="w-6 h-6 text-blue-400" />
+          </div>
+          <p className="text-white font-medium">Pedindo acesso à câmera e microfone...</p>
+          <p className="text-sm text-slate-500">Clique em <strong className="text-slate-300">Permitir</strong> quando o navegador perguntar.</p>
+          <Loader2 className="w-5 h-5 animate-spin text-slate-600 mt-1" />
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-3 py-4 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+            <AlertTriangle className="w-6 h-6 text-amber-400" />
+          </div>
+          <p className="text-white font-medium">{info.title}</p>
+          <p className="text-sm text-slate-400 leading-relaxed max-w-sm">{info.hint}</p>
+          <div className="flex flex-col gap-2 w-full max-w-xs mt-2">
+            <button
+              onClick={request}
+              className="h-10 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" /> Tentar novamente
+            </button>
+            {errName !== 'SecureContext' && (
+              <button
+                onClick={() => setSkipped(true)}
+                className="h-10 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 text-sm font-medium transition-colors"
+              >
+                Entrar sem câmera/microfone
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
