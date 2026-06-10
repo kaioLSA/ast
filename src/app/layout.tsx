@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import { Toaster } from 'sonner'
 import { ThemeProvider } from '@/providers/ThemeProvider'
@@ -18,6 +18,14 @@ const inter = Inter({
   variable: '--font-inter',
   display: 'swap',
 })
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1, // evita o zoom automático ao focar inputs no iOS
+  viewportFit: 'cover', // respeita o notch/safe areas
+  interactiveWidget: 'resizes-content', // teclado do Android não cobre o chat
+}
 
 export const metadata: Metadata = {
   title: {

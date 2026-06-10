@@ -108,7 +108,7 @@ export default function SalaPage() {
   // ── Sala conectada ───────────────────────────────────────────────────────────
   if (phase === 'connected' && token && choices) {
     return (
-      <div data-lk-theme="default" style={{ height: '100dvh' }} className="bg-[#171717]">
+      <div data-lk-theme="default" className="bg-[#171717] fixed inset-0 overflow-hidden overscroll-none">
         <LiveKitRoom
           serverUrl={LIVEKIT_URL}
           token={token}
@@ -681,6 +681,15 @@ function PermissionGate({ children }: { children: React.ReactNode }) {
 // ── Dentro da sala ───────────────────────────────────────────────────────────
 
 const ROOM_CSS = `
+/* trava o scroll/bounce da página enquanto a sala está aberta (mobile) */
+html, body {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+}
 /* Layout de vídeo estilo Meet (tiles dimensionados pelo espaço, sem sobrepor) */
 .meet-tile {
   width: 100%;
@@ -1166,7 +1175,7 @@ function CustomChat({ code, onClose }: { code: string; onClose?: () => void }) {
         )}
       </AnimatePresence>
 
-      <div className="p-3 border-t border-white/10 shrink-0">
+      <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-white/10 shrink-0">
         <div className="flex gap-2">
           <input
             value={text}
@@ -1403,12 +1412,12 @@ function ControlBar({ code, isHost, micMode, setMic, chatOpen, onToggleChat, onR
     }
   }
 
-  const menuCls = 'absolute bottom-full mb-2 rounded-xl border border-white/10 bg-[#1c1c24] shadow-2xl shadow-black/50 p-2 z-50'
+  const menuCls = 'absolute bottom-full mb-2 rounded-xl border border-white/10 bg-[#1c1c24] shadow-2xl shadow-black/50 p-2 z-50 max-w-[calc(100vw-16px)]'
   const anim = { initial: { opacity: 0, y: 8, scale: 0.97 }, animate: { opacity: 1, y: 0, scale: 1 }, exit: { opacity: 0, y: 8, scale: 0.97 }, transition: { duration: 0.16, ease: 'easeOut' as const } }
 
   return (
-    <div ref={wrapRef} className="relative shrink-0 bg-[#171717] border-t border-white/10">
-      <div className="flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-3 flex-wrap">
+    <div ref={wrapRef} className="relative shrink-0 bg-[#171717] border-t border-white/10 pb-[env(safe-area-inset-bottom)]">
+      <div className="flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-3 flex-nowrap sm:flex-wrap overflow-x-auto">
 
         {/* Microfone */}
         <div className="relative flex">
@@ -1491,8 +1500,8 @@ function ControlBar({ code, isHost, micMode, setMic, chatOpen, onToggleChat, onR
           </AnimatePresence>
         </div>
 
-        {/* Compartilhar tela */}
-        <div className="relative flex">
+        {/* Compartilhar tela (navegador de celular não suporta) */}
+        <div className="relative hidden sm:flex">
           <button onClick={toggleScreen} className={cn('flex items-center gap-2 h-10 pl-3 pr-2.5 rounded-l-xl text-sm border border-r-0 transition-colors', screenTgl.enabled ? 'bg-blue-600 border-blue-500 text-white' : 'bg-white/5 border-white/10 text-white hover:bg-white/10')}>
             <MonitorUp className="w-4 h-4" /><span className="hidden md:inline">Tela</span>
           </button>
