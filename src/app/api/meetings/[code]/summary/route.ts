@@ -68,6 +68,40 @@ Seja objetivo e fiel à transcrição. Se algo não aparecer, retorne lista vazi
       body: JSON.stringify({ summary }),
     })
 
+    // também gera um relatório em Task → Relatórios (regenerável: apaga o anterior)
+    if (m.company_id) {
+      try {
+        const today = new Date().toISOString().slice(0, 10)
+        const content = {
+          resumo_geral: summary.resumo || '',
+          topicos: summary.topicos || [],
+          action_items: (summary.action_items || []).map(a => ({
+            tarefa: a.tarefa,
+            responsavel: a.responsavel || 'Não definido',
+            prazo: 'Não definido',
+          })),
+          decisoes: summary.decisoes || [],
+          pendencias: [],
+          follow_up: [],
+          clima: '',
+        }
+        await fetch(`${SUPABASE_URL}/rest/v1/weekly_summaries?ref_code=eq.${encodeURIComponent(m.code)}&source=eq.meeting`, { method: 'DELETE', headers: h })
+        await fetch(`${SUPABASE_URL}/rest/v1/weekly_summaries`, {
+          method: 'POST', headers: { ...h, Prefer: 'return=minimal' },
+          body: JSON.stringify({
+            company_id: m.company_id,
+            group_id: m.code,
+            group_name: m.title || 'Reunião',
+            week_start: today,
+            week_end: today,
+            content,
+            source: 'meeting',
+            ref_code: m.code,
+          }),
+        })
+      } catch { /* relatório é best-effort */ }
+    }
+
     return NextResponse.json({ summary })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'erro' }, { status: 500 })

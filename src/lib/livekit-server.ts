@@ -1,7 +1,10 @@
-import { AccessToken } from 'livekit-server-sdk'
+import { AccessToken, RoomServiceClient } from 'livekit-server-sdk'
 
 const API_KEY = process.env.LIVEKIT_API_KEY ?? ''
 const API_SECRET = process.env.LIVEKIT_API_SECRET ?? ''
+const HTTP_URL = (process.env.NEXT_PUBLIC_LIVEKIT_URL ?? '')
+  .replace(/^wss:/, 'https:')
+  .replace(/^ws:/, 'http:')
 
 export const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
 export const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
@@ -31,7 +34,7 @@ export async function createLiveKitToken(opts: {
   const at = new AccessToken(API_KEY, API_SECRET, {
     identity: opts.identity,
     name: opts.name,
-    ttl: '4h',
+    ttl: '12h',
     metadata: opts.metadata,
   })
   at.addGrant({
@@ -54,10 +57,19 @@ export interface MeetingRow {
   title: string | null
   active: boolean
   created_at: string
-  expires_at: string
+  expires_at: string | null
+  ended_at: string | null
   scheduled_at: string | null
   transcript_status: string | null
   summary: unknown | null
+}
+
+// Encerra a sala no LiveKit (desconecta todos e dispara o webhook room_finished)
+export async function deleteLiveKitRoom(code: string): Promise<void> {
+  try {
+    const svc = new RoomServiceClient(HTTP_URL, API_KEY, API_SECRET)
+    await svc.deleteRoom(code)
+  } catch { /* sala já fechada/inexistente — ok */ }
 }
 
 export async function getMeeting(code: string): Promise<MeetingRow | null> {
@@ -70,6 +82,8 @@ export async function getMeeting(code: string): Promise<MeetingRow | null> {
   return rows?.[0] ?? null
 }
 
+// Sem limite de tempo: o link só "expira" quando a reunião é encerrada
+// (host encerra ou a sala fica vazia → active = false).
 export function isExpired(m: MeetingRow): boolean {
-  return !m.active || new Date(m.expires_at).getTime() < Date.now()
+  return !m.active
 }

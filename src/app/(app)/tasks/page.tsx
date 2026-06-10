@@ -5,7 +5,7 @@ import { usePageTitle } from '@/hooks/usePageTitle'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import {
   ListChecks, FileText, AlertTriangle, Plus, Check, Clock, Circle,
-  Trash2, ChevronDown, ChevronUp, User, X, Loader2, RefreshCw, Bell,
+  Trash2, ChevronDown, ChevronUp, User, X, Loader2, RefreshCw, Bell, Video,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
@@ -29,8 +29,11 @@ interface WeeklySummary {
   week_start: string
   week_end: string
   created_at: string
+  source?: string
+  ref_code?: string
   content: {
     resumo_geral: string
+    topicos?: string[]
     action_items: { tarefa: string; responsavel: string; prazo: string }[]
     decisoes: string[]
     pendencias: string[]
@@ -96,6 +99,7 @@ function TaskRow({ task, onCycle, onDelete }: { task: Task; onCycle: (t: Task) =
           )}
           {task.group_name && <span className="text-[10px] text-slate-600">• {task.group_name}</span>}
           {task.source === 'weekly_summary' && <span className="text-[10px] text-blue-400/70">• via IA</span>}
+          {task.source === 'meeting' && <span className="text-[10px] text-blue-400/70">• via Reunião</span>}
         </div>
       </div>
 
@@ -128,12 +132,20 @@ function Section({ title, items }: { title: string; items: string[] }) {
 function ReportCard({ s }: { s: WeeklySummary }) {
   const [open, setOpen] = useState(false)
   const c = s.content
+  const isMeeting = s.source === 'meeting'
   return (
     <div className="bg-white/3 border border-white/8 rounded-xl overflow-hidden">
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-white/3 transition-colors">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-white truncate">{s.group_name || 'Grupo'}</p>
-          <p className="text-xs text-slate-500 mt-0.5">Semana de {fmtDate(s.week_start)} a {fmtDate(s.week_end)}</p>
+        <div className="min-w-0 flex items-center gap-3">
+          <div className={cn('w-9 h-9 rounded-lg border border-white/10 flex items-center justify-center shrink-0', isMeeting ? 'bg-blue-500/10' : 'bg-white/5')}>
+            {isMeeting ? <Video className="w-4 h-4 text-blue-400" /> : <FileText className="w-4 h-4 text-slate-400" />}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white truncate">{s.group_name || 'Grupo'}</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {isMeeting ? `Reunião • ${fmtDate(s.week_start)}` : `Semana de ${fmtDate(s.week_start)} a ${fmtDate(s.week_end)}`}
+            </p>
+          </div>
         </div>
         {open ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
       </button>
@@ -144,6 +156,8 @@ function ReportCard({ s }: { s: WeeklySummary }) {
             <p className="text-xs font-semibold text-slate-300 mb-1.5">📝 Visão Geral</p>
             <p className="text-xs text-slate-400 leading-relaxed">{c.resumo_geral}</p>
           </div>
+
+          <Section title="📌 Tópicos" items={c.topicos || []} />
 
           {c.action_items?.length > 0 && (
             <div>

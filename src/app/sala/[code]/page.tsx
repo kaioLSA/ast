@@ -892,6 +892,7 @@ function RoomShell({ title, code, isHost }: { title: string; code: string; isHos
       <RoomAudioRenderer />
       <ControlBar
         code={code}
+        isHost={isHost}
         micMode={micMode}
         setMic={setMic}
         chatOpen={chatOpen}
@@ -1151,8 +1152,9 @@ function saveScreenQ(q: ScreenQ) { try { localStorage.setItem(SCREENQ_KEY, JSON.
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '🎉', '👏', '🔥', '🙌']
 
-function ControlBar({ code, micMode, setMic, chatOpen, onToggleChat, onReact }: {
+function ControlBar({ code, isHost, micMode, setMic, chatOpen, onToggleChat, onReact }: {
   code: string
+  isHost: boolean
   micMode: MicMode
   setMic: (m: MicMode) => void
   chatOpen: boolean
@@ -1160,6 +1162,15 @@ function ControlBar({ code, micMode, setMic, chatOpen, onToggleChat, onReact }: 
   onReact: (e: string) => void
 }) {
   const room = useRoomContext()
+  const [confirmEnd, setConfirmEnd] = useState(false)
+  const [ending, setEnding] = useState(false)
+
+  const endForAll = async () => {
+    setEnding(true)
+    try { await fetch(`/api/meetings/${code}/end`, { method: 'POST' }) } catch { /* ignore */ }
+    room.disconnect()
+  }
+  const onLeaveClick = () => { if (isHost) setConfirmEnd(true); else room.disconnect() }
   const { localParticipant } = useLocalParticipant()
   const [highlighted, setHighlighted] = useState(false)
   const highlight = () => {
@@ -1407,10 +1418,39 @@ function ControlBar({ code, micMode, setMic, chatOpen, onToggleChat, onReact }: 
         </button>
 
         {/* Sair */}
-        <button onClick={() => room.disconnect()} className="flex items-center gap-2 h-10 px-3 rounded-xl text-sm bg-red-600 hover:bg-red-500 text-white transition-colors">
+        <button onClick={onLeaveClick} className="flex items-center gap-2 h-10 px-3 rounded-xl text-sm bg-red-600 hover:bg-red-500 text-white transition-colors">
           <PhoneOff className="w-4 h-4" /><span className="hidden md:inline">Sair</span>
         </button>
       </div>
+
+      {/* Confirmação de encerramento (host) */}
+      <AnimatePresence>
+        {confirmEnd && (
+          <motion.div
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          >
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !ending && setConfirmEnd(false)} />
+            <motion.div
+              className="relative z-10 w-full max-w-sm rounded-2xl border border-white/10 bg-[#1c1c24] shadow-2xl p-5"
+              initial={{ scale: 0.94, y: 8 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.94, y: 8, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className="w-9 h-9 rounded-xl bg-red-500/15 flex items-center justify-center shrink-0"><PhoneOff className="w-4 h-4 text-red-400" /></div>
+                <h3 className="text-base font-semibold text-white">Encerrar reunião?</h3>
+              </div>
+              <p className="text-sm text-slate-400 mb-5">Como você é o anfitrião, ao sair a reunião será encerrada para todos e <span className="text-slate-200">ninguém poderá entrar de novo neste link</span>. A transcrição é gerada automaticamente depois.</p>
+              <div className="flex gap-2">
+                <button onClick={() => setConfirmEnd(false)} disabled={ending} className="flex-1 h-10 rounded-xl text-sm font-medium bg-white/5 border border-white/10 text-slate-200 hover:bg-white/10 transition-colors disabled:opacity-50">Cancelar</button>
+                <button onClick={endForAll} disabled={ending} className="flex-1 h-10 rounded-xl text-sm font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                  {ending ? <><Loader2 className="w-4 h-4 animate-spin" /> Encerrando...</> : 'Encerrar reunião'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

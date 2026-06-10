@@ -9,17 +9,15 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}))
   const title: string = (body.title || 'Reunião').toString().slice(0, 120)
-  const hours = Math.min(Math.max(Number(body.hours) || 12, 1), 72)
 
   let scheduledISO: string | null = null
-  let baseMs = Date.now()
   if (body.scheduled_at) {
     const d = new Date(body.scheduled_at)
-    if (!isNaN(d.getTime()) && d.getTime() > Date.now()) { scheduledISO = d.toISOString(); baseMs = d.getTime() }
+    if (!isNaN(d.getTime()) && d.getTime() > Date.now()) scheduledISO = d.toISOString()
   }
-  const expires_at = new Date(baseMs + hours * 3600 * 1000).toISOString()
   const code = generateMeetingCode()
 
+  // Sem limite de tempo: o link vale até a reunião ser encerrada (host encerra ou sala vazia).
   const res = await fetch(`${SUPABASE_URL}/rest/v1/meetings`, {
     method: 'POST',
     headers: { ...sbHeaders(), Prefer: 'return=representation' },
@@ -29,7 +27,7 @@ export async function POST(request: NextRequest) {
       host_name: user.name,
       company_id: user.company_id,
       title,
-      expires_at,
+      expires_at: null,
       scheduled_at: scheduledISO,
     }),
   })

@@ -6,7 +6,7 @@ import { usePageTitle } from '@/hooks/usePageTitle'
 import { PageHeader } from '@/components/layout/page-header/PageHeader'
 import {
   Video, Plus, Copy, Check, ExternalLink, Clock, X, Loader2, Link2,
-  Trash2, UserPlus, CalendarClock, Users, FileText, Sparkles, ChevronRight, Star,
+  Trash2, UserPlus, CalendarClock, Users, FileText, Sparkles, ChevronRight, Star, ListChecks,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
@@ -15,7 +15,8 @@ interface Meeting {
   code: string
   title: string | null
   created_at: string
-  expires_at: string
+  expires_at: string | null
+  ended_at?: string | null
   scheduled_at: string | null
   active: boolean
   role?: 'host' | 'guest'
@@ -25,8 +26,9 @@ function meetingLink(code: string) {
   if (typeof window === 'undefined') return ''
   return `${window.location.origin}/sala/${code}`
 }
+// Sem limite de tempo: só está "encerrada" quando active = false.
 function isExpired(m: Meeting) {
-  return !m.active || new Date(m.expires_at).getTime() < Date.now()
+  return !m.active
 }
 function isPending(m: Meeting) {
   return !!m.scheduled_at && new Date(m.scheduled_at).getTime() > Date.now()
@@ -121,7 +123,7 @@ export default function MeetingsPage() {
                   </div>
                   <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1.5">
                     <Clock className="w-3 h-3" />
-                    {expired ? 'Expirada' : pending ? `Agendada para ${fmt(m.scheduled_at!)}` : `Expira ${fmt(m.expires_at)}`}
+                    {expired ? 'Encerrada' : pending ? `Agendada para ${fmt(m.scheduled_at!)}` : 'Link ativo'}
                   </p>
                 </button>
 
@@ -234,8 +236,9 @@ function DetailModal({ meeting, onClose }: { meeting: Meeting; onClose: () => vo
 
   useEffect(() => { load() }, [load])
   useEffect(() => {
-    if (data?.status !== 'processing') return
-    const t = setInterval(load, 4000)
+    // acompanha o fluxo automático (gravando → gravado → transcrevendo → pronto)
+    if (!['processing', 'recording', 'recorded'].includes(data?.status ?? '')) return
+    const t = setInterval(load, 5000)
     return () => clearInterval(t)
   }, [data?.status, load])
 
@@ -254,6 +257,18 @@ function DetailModal({ meeting, onClose }: { meeting: Meeting; onClose: () => vo
       const d = await r.json()
       if (d?.summary) setSummary(d.summary)
     } catch { /* ignore */ } finally { setGenAI(false) }
+  }
+
+  const [creatingTasks, setCreatingTasks] = useState(false)
+  const [tasksMsg, setTasksMsg] = useState('')
+  const createTasks = async () => {
+    setCreatingTasks(true)
+    try {
+      const r = await fetch(`/api/meetings/${meeting.code}/action-items`, { method: 'POST' })
+      const d = await r.json()
+      if (r.ok) setTasksMsg(d.created > 0 ? `✓ ${d.created} tarefa(s) criada(s) no CRM` : 'Tarefas já estavam criadas')
+      else setTasksMsg('Não foi possível criar as tarefas')
+    } catch { setTasksMsg('Erro ao criar tarefas') } finally { setCreatingTasks(false) }
   }
 
   const status = data?.status ?? 'none'
@@ -287,9 +302,24 @@ function DetailModal({ meeting, onClose }: { meeting: Meeting; onClose: () => vo
                 <div className="space-y-4">
                   {summary.resumo && <div><p className="text-xs font-semibold text-slate-400 mb-1">Resumo</p><p className="text-sm text-slate-200 leading-relaxed">{summary.resumo}</p></div>}
                   {summary.topicos?.length ? <div><p className="text-xs font-semibold text-slate-400 mb-1.5">Tópicos</p><ul className="space-y-1">{summary.topicos.map((t, i) => <li key={i} className="text-sm text-slate-200 flex gap-2"><span className="text-blue-400">•</span>{t}</li>)}</ul></div> : null}
-                  {summary.action_items?.length ? <div><p className="text-xs font-semibold text-slate-400 mb-1.5">Action items</p><ul className="space-y-1.5">{summary.action_items.map((a, i) => <li key={i} className="text-sm text-slate-200 flex gap-2"><span className="w-4 h-4 rounded border border-white/20 shrink-0 mt-0.5" />{a.tarefa}{a.responsavel ? <span className="text-slate-500"> — {a.responsavel}</span> : null}</li>)}</ul></div> : null}
+                  {summary.action_items?.length ? (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-400 mb-1.5">Action items</p>
+                      <ul className="space-y-1.5">{summary.action_items.map((a, i) => <li key={i} className="text-sm text-slate-200 flex gap-2"><span className="w-4 h-4 rounded border border-white/20 shrink-0 mt-0.5" />{a.tarefa}{a.responsavel ? <span className="text-slate-500"> — {a.responsavel}</span> : null}</li>)}</ul>
+                      {data?.isHost && (
+                        <div className="flex items-center gap-3 mt-2.5">
+                          <button onClick={createTasks} disabled={creatingTasks} className="flex items-center gap-2 px-3 h-9 rounded-lg bg-white text-gray-900 text-xs font-semibold hover:bg-slate-100 disabled:opacity-50 transition-colors">
+                            {creatingTasks ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ListChecks className="w-3.5 h-3.5" />}
+                            Criar tarefas no CRM
+                          </button>
+                          {tasksMsg && <span className="text-xs text-emerald-400">{tasksMsg}</span>}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                   {summary.decisoes?.length ? <div><p className="text-xs font-semibold text-slate-400 mb-1.5">Decisões</p><ul className="space-y-1">{summary.decisoes.map((d, i) => <li key={i} className="text-sm text-slate-200 flex gap-2"><Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />{d}</li>)}</ul></div> : null}
-                  {data?.isHost && <button onClick={generateAI} disabled={genAI} className="text-xs text-slate-500 hover:text-blue-400 mt-2 disabled:opacity-50">{genAI ? 'Gerando...' : 'Gerar novamente'}</button>}
+                  {data?.isHost && <p className="text-[11px] text-slate-600 mt-1">O relatório completo também fica em <span className="text-slate-400">Task → Relatórios</span>.</p>}
+                  {data?.isHost && <button onClick={generateAI} disabled={genAI} className="text-xs text-slate-500 hover:text-blue-400 mt-1 disabled:opacity-50">{genAI ? 'Gerando...' : 'Gerar novamente'}</button>}
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-3 py-8 text-center">
@@ -375,7 +405,6 @@ function CreateModal({
   onClose: () => void
 }) {
   const [title, setTitle] = useState('')
-  const [hours, setHours] = useState('12')
   const [when, setWhen] = useState<'now' | 'schedule'>('now')
   const [scheduledAt, setScheduledAt] = useState('')
   const [creating, setCreating] = useState(false)
@@ -383,7 +412,7 @@ function CreateModal({
   const create = async () => {
     setCreating(true)
     try {
-      const payload: Record<string, unknown> = { title: title.trim() || 'Reunião', hours: Number(hours) }
+      const payload: Record<string, unknown> = { title: title.trim() || 'Reunião' }
       if (when === 'schedule' && scheduledAt) payload.scheduled_at = new Date(scheduledAt).toISOString()
       const r = await fetch('/api/meetings', {
         method: 'POST',
@@ -449,16 +478,10 @@ function CreateModal({
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">O link expira em</label>
-                <select value={hours} onChange={e => setHours(e.target.value)} className="w-full h-10 rounded-xl bg-[#1c1c24] border border-white/10 px-3 text-sm text-white focus:outline-none focus:border-blue-500/50">
-                  <option value="1">1 hora</option>
-                  <option value="12">12 horas</option>
-                  <option value="24">24 horas</option>
-                  <option value="72">3 dias</option>
-                </select>
-                {when === 'schedule' && <p className="text-[10px] text-slate-600 mt-1">A contagem começa no horário agendado.</p>}
-              </div>
+              <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                <Clock className="w-3 h-3 shrink-0" />
+                O link não expira por tempo — vale até a reunião ser encerrada (você encerra ou a sala fica vazia).
+              </p>
 
               <button onClick={create} disabled={creating || (when === 'schedule' && !scheduledAt)} className="w-full h-11 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                 {creating ? <><Loader2 className="w-4 h-4 animate-spin" /> Criando...</> : <><Plus className="w-4 h-4" /> {when === 'schedule' ? 'Agendar reunião' : 'Criar reunião'}</>}
