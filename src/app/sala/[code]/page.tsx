@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LiveKitRoom, useLocalParticipant, usePreviewTracks,
-  useTracks, GridLayout, ParticipantTile, RoomAudioRenderer, useChat,
+  useTracks, ParticipantTile, RoomAudioRenderer, useChat,
   useMediaDeviceSelect, useTrackToggle, useDataChannel, useParticipants, useRoomContext,
   type LocalUserChoices,
 } from '@livekit/components-react'
@@ -681,34 +681,119 @@ function PermissionGate({ children }: { children: React.ReactNode }) {
 // ── Dentro da sala ───────────────────────────────────────────────────────────
 
 const ROOM_CSS = `
-/* Área de vídeo contida e centralizada (estilo Meet) */
-.lk-grid-layout {
-  padding: 20px;
-  gap: 14px;
-  height: 100%;
-  align-content: center;
-  justify-content: center;
-  place-items: center;
-}
-.lk-grid-layout .lk-participant-tile {
-  border-radius: 18px;
-  overflow: hidden;
+/* Layout de vídeo estilo Meet (tiles dimensionados pelo espaço, sem sobrepor) */
+.meet-tile {
   width: 100%;
-  max-width: 1080px;
-  max-height: calc(100dvh - 190px);
-  aspect-ratio: 16 / 9;
-  margin: auto;
-  align-self: center;
-  justify-self: center;
-  background: #16161d;
+  height: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #0f0f13;
 }
-.lk-focus-layout .lk-participant-tile { border-radius: 18px; overflow: hidden; }
+.meet-tile .lk-participant-media-video,
+.meet-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.meet-tile--screen .lk-participant-media-video,
+.meet-tile--screen video {
+  object-fit: contain;
+  background: #0b0b0d;
+}
 /* Anel ao redor de quem está falando */
 .lk-participant-tile[data-lk-speaking="true"] {
   box-shadow: 0 0 0 3px #3b82f6, 0 0 22px 2px rgba(59,130,246,0.45);
   transition: box-shadow 0.15s ease;
 }
+.meet-strip::-webkit-scrollbar { height: 6px; }
+.meet-strip::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 99px; }
 `
+
+type TrackRef = ReturnType<typeof useTracks>[number]
+
+function trackKey(t: TrackRef) {
+  const sid = t.publication?.trackSid ?? 'placeholder'
+  return `${t.participant.identity}__${t.source}__${sid}`
+}
+
+// mede o elemento (largura/altura) de forma reativa
+function useElementSize() {
+  const ref = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState({ w: 0, h: 0 })
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect
+      if (r) setSize({ w: r.width, h: r.height })
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return [ref, size] as const
+}
+
+// escolhe nº de colunas/linhas e tamanho do tile (16:9) que melhor preenche o espaço
+function bestGrid(n: number, W: number, H: number, gap: number) {
+  if (n <= 0 || W <= 0 || H <= 0) return { tileW: 0, tileH: 0 }
+  let best = { tileW: 0, tileH: 0, area: 0 }
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols)
+    const cellW = (W - gap * (cols - 1)) / cols
+    const cellH = (H - gap * (rows - 1)) / rows
+    if (cellW <= 0 || cellH <= 0) continue
+    let tW = cellW
+    let tH = (cellW * 9) / 16
+    if (tH > cellH) { tH = cellH; tW = (cellH * 16) / 9 }
+    const area = tW * tH
+    if (area > best.area) best = { tileW: Math.floor(tW), tileH: Math.floor(tH), area }
+  }
+  return { tileW: best.tileW, tileH: best.tileH }
+}
+
+function VideoStage({ tracks }: { tracks: TrackRef[] }) {
+  const [ref, { w, h }] = useElementSize()
+  const screen = tracks.find((t) => t.source === Track.Source.ScreenShare)
+  const cams = tracks.filter((t) => t.source !== Track.Source.ScreenShare)
+
+  // Modo foco: alguém compartilhando a tela
+  if (screen) {
+    return (
+      <div className="h-full w-full flex flex-col gap-3 p-3 sm:p-4">
+        <div className="flex-1 min-h-0 min-w-0">
+          <ParticipantTile trackRef={screen} className="meet-tile meet-tile--screen" />
+        </div>
+        {cams.length > 0 && (
+          <div className="meet-strip h-[110px] sm:h-[132px] shrink-0 flex gap-3 justify-center overflow-x-auto">
+            {cams.map((t) => (
+              <div key={trackKey(t)} className="aspect-video h-full shrink-0">
+                <ParticipantTile trackRef={t} className="meet-tile" />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Grid adaptável (igual ao Meet)
+  const g = bestGrid(cams.length, w, h, 12)
+  return (
+    <div ref={ref} className="h-full w-full p-3 sm:p-4">
+      <div className="flex flex-wrap items-center justify-center content-center gap-3 h-full w-full">
+        {cams.map((t) => (
+          <div
+            key={trackKey(t)}
+            className="min-w-0"
+            style={g.tileW ? { width: g.tileW, height: g.tileH } : { width: '100%', aspectRatio: '16 / 9' }}
+          >
+            <ParticipantTile trackRef={t} className="meet-tile" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function RoomShell({ title, code, isHost }: { title: string; code: string; isHost: boolean }) {
   const participants = useParticipants()
@@ -778,10 +863,8 @@ function RoomShell({ title, code, isHost }: { title: string; code: string; isHos
 
       {/* Vídeo + chat */}
       <div className="flex-1 min-h-0 flex">
-        <div className="flex-1 min-h-0">
-          <GridLayout tracks={tracks}>
-            <ParticipantTile />
-          </GridLayout>
+        <div className="flex-1 min-h-0 min-w-0">
+          <VideoStage tracks={tracks} />
         </div>
         <AnimatePresence>
           {chatOpen && (
