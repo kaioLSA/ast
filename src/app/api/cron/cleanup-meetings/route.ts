@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { SUPABASE_URL, sbHeaders } from '@/lib/livekit-server'
 import { maybeAutoTranscribe } from '@/lib/meeting-transcribe'
+import { deleteRecordingFiles, listRecordingDirs } from '@/lib/recordings'
 
 const CRON_SECRET = process.env.CRON_SECRET ?? 'cron-startsette-2024'
 
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const result = { ended: 0, messagesDeleted: false, requestsDeleted: false, oldMeetingsDeleted: false, retranscribed: 0 }
+  const result = { ended: 0, messagesDeleted: false, requestsDeleted: false, oldMeetingsDeleted: false, retranscribed: 0, audioFoldersDeleted: 0 }
 
   try {
     // 1) reuniões encerradas (active = false) → apaga chat e pedidos (privacidade)
@@ -48,7 +49,30 @@ export async function GET(request: NextRequest) {
     }
     result.retranscribed = stuck.length
 
-    // 3) remove reuniões encerradas há mais de 30 dias (faxina; transcrição/relatório já ficam salvos)
+    // 3) limpeza dos áudios no disco (parte pesada do servidor):
+    //    - pastas órfãs (reunião já excluída do banco)
+    //    - reuniões já transcritas (ready/empty) e encerradas há +24h — o áudio não serve mais,
+    //      a transcrição e o relatório ficam salvos no banco (leve)
+    const dirs = await listRecordingDirs()
+    if (dirs.length) {
+      const allRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/meetings?select=code,transcript_status,ended_at&limit=10000`,
+        { headers: sbHeaders(), cache: 'no-store' },
+      )
+      const all: Array<{ code: string; transcript_status: string | null; ended_at: string | null }> = allRes.ok ? await allRes.json() : []
+      const byCode = new Map(all.map(m => [m.code, m]))
+      const dayAgo = Date.now() - 24 * 3600 * 1000
+      for (const dir of dirs) {
+        const m = byCode.get(dir)
+        const transcribed = m && ['ready', 'empty'].includes(m.transcript_status ?? '')
+          && m.ended_at && new Date(m.ended_at).getTime() < dayAgo
+        if (!m || transcribed) {
+          if (await deleteRecordingFiles(dir)) result.audioFoldersDeleted++
+        }
+      }
+    }
+
+    // 4) remove reuniões encerradas há mais de 30 dias (faxina; transcrição/relatório já ficam salvos)
     const monthAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
     const delOld = await fetch(`${SUPABASE_URL}/rest/v1/meetings?ended_at=lt.${monthAgo}`, { method: 'DELETE', headers: sbHeaders() })
     result.oldMeetingsDeleted = delOld.ok
