@@ -72,6 +72,12 @@ export async function deleteLiveKitRoom(code: string): Promise<void> {
   } catch { /* sala já fechada/inexistente — ok */ }
 }
 
+// Expulsa um participante da sala (host)
+export async function removeLiveKitParticipant(code: string, identity: string): Promise<void> {
+  const svc = new RoomServiceClient(HTTP_URL, API_KEY, API_SECRET)
+  await svc.removeParticipant(code, identity)
+}
+
 export async function getMeeting(code: string): Promise<MeetingRow | null> {
   const res = await fetch(
     `${SUPABASE_URL}/rest/v1/meetings?select=*&code=eq.${encodeURIComponent(code)}&limit=1`,

@@ -5,12 +5,12 @@ import { getMeeting, isExpired, createLiveKitToken, SUPABASE_URL, sbHeaders } fr
 async function getAvatar(userId: string): Promise<string | null> {
   try {
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/crm_users?select=avatar&id=eq.${userId}&limit=1`,
+      `${SUPABASE_URL}/rest/v1/crm_users?select=avatar_url&id=eq.${userId}&limit=1`,
       { headers: sbHeaders(), cache: 'no-store' },
     )
     if (!res.ok) return null
     const rows = await res.json()
-    return rows?.[0]?.avatar ?? null
+    return rows?.[0]?.avatar_url ?? null
   } catch { return null }
 }
 
@@ -26,12 +26,13 @@ export async function POST(_req: Request, { params }: { params: { code: string }
 
   const avatar = await getAvatar(user.id)
 
+  // o avatar NÃO vai no metadata (imagem base64 deixaria o token enorme);
+  // os tiles buscam as fotos pelo endpoint /avatars.
   const token = await createLiveKitToken({
     room: m.code,
     identity: `host-${user.id}`,
     name: user.name || 'Anfitrião',
     isHost: true,
-    metadata: JSON.stringify({ avatar }),
   })
   return NextResponse.json({ token, name: user.name, avatar })
 }

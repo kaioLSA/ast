@@ -11,7 +11,7 @@ import {
 } from '@livekit/components-react'
 import { Track, type LocalVideoTrack } from 'livekit-client'
 import '@livekit/components-styles'
-import { Loader2, Video, VideoOff, Check, X, Users, Image as ImageIcon, CircleOff, Camera, Mic, MicOff, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, MonitorUp, Smile, MessageSquare, PhoneOff, Send, Clock, Star } from 'lucide-react'
+import { Loader2, Video, VideoOff, Check, X, Users, Image as ImageIcon, CircleOff, Camera, Mic, MicOff, AlertTriangle, RefreshCw, ChevronDown, ChevronUp, MonitorUp, Smile, MessageSquare, PhoneOff, Send, Clock, Star, MoreVertical, UserX } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
 const LIVEKIT_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL ?? ''
@@ -685,9 +685,7 @@ const ROOM_CSS = `
 .meet-tile {
   width: 100%;
   height: 100%;
-  border-radius: 16px;
-  overflow: hidden;
-  background: #0f0f13;
+  background: transparent; /* o wrapper segura o fundo escuro + cantos */
 }
 .meet-tile .lk-participant-media-video,
 .meet-tile video {
@@ -698,11 +696,12 @@ const ROOM_CSS = `
 .meet-tile--screen .lk-participant-media-video,
 .meet-tile--screen video {
   object-fit: contain;
-  background: #0b0b0d;
 }
-/* Anel ao redor de quem está falando */
+/* esconde o placeholder cinza padrão do LiveKit (usamos avatar próprio) */
+.meet-tile .lk-participant-placeholder { display: none !important; }
+/* Anel ao redor de quem está falando (interno, pra não ser cortado pelo overflow) */
 .lk-participant-tile[data-lk-speaking="true"] {
-  box-shadow: 0 0 0 3px #3b82f6, 0 0 22px 2px rgba(59,130,246,0.45);
+  box-shadow: inset 0 0 0 3px #3b82f6;
   transition: box-shadow 0.15s ease;
 }
 .meet-strip::-webkit-scrollbar { height: 6px; }
@@ -710,10 +709,124 @@ const ROOM_CSS = `
 `
 
 type TrackRef = ReturnType<typeof useTracks>[number]
+interface ReactionItem { id: number; emoji: string; identity: string }
+interface StageProps {
+  tracks: TrackRef[]
+  isHost: boolean
+  localIdentity: string
+  avatarMap: Record<string, string>
+  reactions: ReactionItem[]
+  onRemove: (identity: string, name: string) => void
+}
 
 function trackKey(t: TrackRef) {
   const sid = t.publication?.trackSid ?? 'placeholder'
   return `${t.participant.identity}__${t.source}__${sid}`
+}
+
+// cor de fundo estável a partir do nome (estilo Meet)
+function colorFromName(name: string) {
+  let h = 0
+  const s = name || '?'
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360
+  return `hsl(${h}, 55%, 42%)`
+}
+
+function TileAvatar({ name, avatar }: { name: string; avatar?: string | null }) {
+  const initial = (name?.trim()?.[0] || '?').toUpperCase()
+  return (
+    <div className="absolute inset-0 z-0 flex items-center justify-center">
+      {avatar ? (
+        <img src={avatar} alt={name} className="w-16 h-16 sm:w-28 sm:h-28 rounded-full object-cover border border-white/10" />
+      ) : (
+        <div
+          className="w-16 h-16 sm:w-28 sm:h-28 rounded-full flex items-center justify-center text-2xl sm:text-4xl font-semibold text-white select-none"
+          style={{ background: colorFromName(name) }}
+        >
+          {initial}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Tile({ t, isHost, localIdentity, avatar, reactions, onRemove }: {
+  t: TrackRef
+  isHost: boolean
+  localIdentity: string
+  avatar?: string | null
+  reactions: ReactionItem[]
+  onRemove: (identity: string, name: string) => void
+}) {
+  const p = t.participant
+  const identity = p?.identity || ''
+  const isScreen = t.source === Track.Source.ScreenShare
+  const pub = t.publication
+  const camOff = !isScreen && (!pub || pub.isMuted)
+  const name = p?.name || (identity.startsWith('host-') ? 'Anfitrião' : 'Convidado')
+  const canRemove = isHost && !isScreen && identity !== localIdentity
+  const [menu, setMenu] = useState(false)
+  const myReactions = reactions.filter(r => r.identity === identity)
+
+  return (
+    <div
+      className="group relative w-full h-full rounded-2xl overflow-hidden bg-[#0f0f13]"
+      onContextMenu={canRemove ? (e) => { e.preventDefault(); setMenu(true) } : undefined}
+    >
+      {camOff && <TileAvatar name={name} avatar={avatar} />}
+      <ParticipantTile trackRef={t} className={cn('meet-tile', isScreen && 'meet-tile--screen')} />
+
+      {/* reações da pessoa (sobem no card dela) */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center">
+        <AnimatePresence>
+          {myReactions.map(r => (
+            <motion.div
+              key={r.id}
+              initial={{ opacity: 0, y: 12, scale: 0.6 }}
+              animate={{ opacity: 1, y: -90, scale: 1.25 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 2.6, ease: 'easeOut' }}
+              className="absolute text-4xl sm:text-5xl select-none drop-shadow-lg"
+            >
+              {r.emoji}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* opções do host (expulsar) — botão + clique direito */}
+      {canRemove && (
+        <>
+          <button
+            onClick={() => setMenu(v => !v)}
+            title="Opções"
+            className="absolute top-2 right-2 z-30 w-8 h-8 rounded-lg bg-black/45 hover:bg-black/65 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 max-sm:opacity-100 transition-opacity"
+          >
+            <MoreVertical className="w-4 h-4" />
+          </button>
+          <AnimatePresence>
+            {menu && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setMenu(false)} />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.14 }}
+                  className="absolute top-11 right-2 z-40 rounded-xl border border-white/10 bg-[#1c1c24] shadow-2xl p-1.5 w-48"
+                >
+                  <button
+                    onClick={() => { setMenu(false); onRemove(identity, name) }}
+                    className="w-full text-left px-2.5 py-2 rounded-lg text-sm text-red-300 hover:bg-red-500/10 flex items-center gap-2 transition-colors"
+                  >
+                    <UserX className="w-4 h-4" /> Remover da reunião
+                  </button>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </>
+      )}
+    </div>
+  )
 }
 
 // mede o elemento (largura/altura) de forma reativa
@@ -751,23 +864,28 @@ function bestGrid(n: number, W: number, H: number, gap: number) {
   return { tileW: best.tileW, tileH: best.tileH }
 }
 
-function VideoStage({ tracks }: { tracks: TrackRef[] }) {
+function VideoStage({ tracks, isHost, localIdentity, avatarMap, reactions, onRemove }: StageProps) {
   const [ref, { w, h }] = useElementSize()
   const screen = tracks.find((t) => t.source === Track.Source.ScreenShare)
   const cams = tracks.filter((t) => t.source !== Track.Source.ScreenShare)
 
+  const tileProps = (t: TrackRef) => ({
+    t, isHost, localIdentity, reactions, onRemove,
+    avatar: avatarMap[t.participant?.identity || ''],
+  })
+
   // Modo foco: alguém compartilhando a tela
   if (screen) {
     return (
-      <div className="h-full w-full flex flex-col gap-3 p-3 sm:p-4">
+      <div className="h-full w-full flex flex-col gap-3 p-2 sm:p-4">
         <div className="flex-1 min-h-0 min-w-0">
-          <ParticipantTile trackRef={screen} className="meet-tile meet-tile--screen" />
+          <Tile {...tileProps(screen)} />
         </div>
         {cams.length > 0 && (
-          <div className="meet-strip h-[110px] sm:h-[132px] shrink-0 flex gap-3 justify-center overflow-x-auto">
+          <div className="meet-strip h-[88px] sm:h-[132px] shrink-0 flex gap-2 sm:gap-3 justify-center overflow-x-auto">
             {cams.map((t) => (
               <div key={trackKey(t)} className="aspect-video h-full shrink-0">
-                <ParticipantTile trackRef={t} className="meet-tile" />
+                <Tile {...tileProps(t)} />
               </div>
             ))}
           </div>
@@ -779,15 +897,15 @@ function VideoStage({ tracks }: { tracks: TrackRef[] }) {
   // Grid adaptável (igual ao Meet)
   const g = bestGrid(cams.length, w, h, 12)
   return (
-    <div ref={ref} className="h-full w-full p-3 sm:p-4">
-      <div className="flex flex-wrap items-center justify-center content-center gap-3 h-full w-full">
+    <div ref={ref} className="h-full w-full p-2 sm:p-4">
+      <div className="flex flex-wrap items-center justify-center content-center gap-2 sm:gap-3 h-full w-full">
         {cams.map((t) => (
           <div
             key={trackKey(t)}
             className="min-w-0"
             style={g.tileW ? { width: g.tileW, height: g.tileH } : { width: '100%', aspectRatio: '16 / 9' }}
           >
-            <ParticipantTile trackRef={t} className="meet-tile" />
+            <Tile {...tileProps(t)} />
           </div>
         ))}
       </div>
@@ -797,24 +915,45 @@ function VideoStage({ tracks }: { tracks: TrackRef[] }) {
 
 function RoomShell({ title, code, isHost }: { title: string; code: string; isHost: boolean }) {
   const participants = useParticipants()
+  const { localParticipant } = useLocalParticipant()
   const [chatOpen, setChatOpen] = useState(false)
   const [micMode, setMicModeState] = useState<MicMode>(() => (typeof window !== 'undefined' ? loadMic() : { mode: 'open', code: 'Space', label: 'Espaço' }))
   const setMic = (m: MicMode) => { setMicModeState(m); saveMic(m) }
-  const [reactions, setReactions] = useState<{ id: number; emoji: string; x: number }[]>([])
+  const [reactions, setReactions] = useState<ReactionItem[]>([])
+  const [avatarMap, setAvatarMap] = useState<Record<string, string>>({})
 
-  const pushReaction = useCallback((emoji: string) => {
+  // fotos dos participantes do CRM (ex.: foto do anfitrião) — todos veem
+  useEffect(() => {
+    fetch(`/api/meetings/${code}/avatars`)
+      .then(r => r.ok ? r.json() : {})
+      .then((d: Record<string, string>) => { if (d && typeof d === 'object') setAvatarMap(d) })
+      .catch(() => {})
+  }, [code])
+
+  const pushReaction = useCallback((emoji: string, identity: string) => {
     const id = Date.now() + Math.random()
-    const x = 12 + Math.random() * 76
-    setReactions(r => [...r, { id, emoji, x }])
-    setTimeout(() => setReactions(r => r.filter(z => z.id !== id)), 3600)
+    setReactions(r => [...r, { id, emoji, identity }])
+    setTimeout(() => setReactions(r => r.filter(z => z.id !== id)), 2800)
   }, [])
 
   const { send } = useDataChannel('reactions', (msg) => {
-    try { const d = JSON.parse(new TextDecoder().decode(msg.payload)); if (d?.emoji) pushReaction(d.emoji) } catch { /* ignore */ }
+    try {
+      const d = JSON.parse(new TextDecoder().decode(msg.payload))
+      if (d?.emoji) pushReaction(d.emoji, d.identity || msg.from?.identity || '')
+    } catch { /* ignore */ }
   })
   const sendReaction = (emoji: string) => {
-    pushReaction(emoji)
-    try { send(new TextEncoder().encode(JSON.stringify({ emoji })), {}) } catch { /* ignore */ }
+    const identity = localParticipant.identity
+    pushReaction(emoji, identity)
+    try { send(new TextEncoder().encode(JSON.stringify({ emoji, identity })), {}) } catch { /* ignore */ }
+  }
+
+  const removeParticipant = (identity: string, name: string) => {
+    if (!confirm(`Remover ${name} da reunião?`)) return
+    fetch(`/api/meetings/${code}/remove`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identity }),
+    }).catch(() => {})
   }
 
   const tracks = useTracks(
@@ -827,14 +966,14 @@ function RoomShell({ title, code, isHost }: { title: string; code: string; isHos
       <style>{ROOM_CSS}</style>
 
       {/* Top bar cinza */}
-      <div className="flex items-center justify-between px-4 py-2.5 shrink-0 bg-[#171717] border-b border-white/10">
+      <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 shrink-0 bg-[#171717] border-b border-white/10">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
             <Video className="w-4 h-4 text-slate-200" />
           </div>
           <span className="text-sm font-medium text-white truncate">{title}</span>
         </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-slate-300">
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-slate-300 shrink-0">
           <Users className="w-3.5 h-3.5" /> {participants.length}
         </div>
       </div>
@@ -842,48 +981,28 @@ function RoomShell({ title, code, isHost }: { title: string; code: string; isHos
       {isHost && <HostLobby code={code} />}
       <PushToTalk mic={micMode} />
 
-      {/* Reações flutuantes */}
-      <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
-        <AnimatePresence>
-          {reactions.map(r => (
-            <motion.div
-              key={r.id}
-              initial={{ opacity: 0, y: 0, scale: 0.5 }}
-              animate={{ opacity: 1, y: -340, scale: 1.3 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 3.4, ease: 'easeOut' }}
-              className="absolute bottom-28 text-5xl select-none"
-              style={{ left: `${r.x}%` }}
-            >
-              {r.emoji}
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-
       {/* Vídeo + chat */}
-      <div className="flex-1 min-h-0 flex">
+      <div className="flex-1 min-h-0 flex relative">
         <div className="flex-1 min-h-0 min-w-0">
-          <VideoStage tracks={tracks} />
+          <VideoStage
+            tracks={tracks}
+            isHost={isHost}
+            localIdentity={localParticipant.identity}
+            avatarMap={avatarMap}
+            reactions={reactions}
+            onRemove={removeParticipant}
+          />
         </div>
         <AnimatePresence>
           {chatOpen && (
             <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 320, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-              className="border-l border-white/10 bg-[#171717] overflow-hidden shrink-0"
+              initial={{ opacity: 0, x: 24 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 24 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="absolute inset-0 z-40 bg-[#171717] sm:static sm:inset-auto sm:w-80 sm:shrink-0 sm:border-l border-white/10"
             >
-              <motion.div
-                initial={{ x: 40, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: 40, opacity: 0 }}
-                transition={{ duration: 0.22, ease: 'easeOut' }}
-                className="w-80 h-full"
-              >
-                <CustomChat code={code} />
-              </motion.div>
+              <CustomChat code={code} onClose={() => setChatOpen(false)} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -912,7 +1031,7 @@ function isTypingTarget() {
 
 interface Msg { ts: number; identity: string; name: string; text: string }
 
-function CustomChat({ code }: { code: string }) {
+function CustomChat({ code, onClose }: { code: string; onClose?: () => void }) {
   const { localParticipant } = useLocalParticipant()
   const { chatMessages, send, isSending } = useChat()
   const [text, setText] = useState('')
@@ -1002,8 +1121,13 @@ function CustomChat({ code }: { code: string }) {
 
   return (
     <div className="flex flex-col h-full bg-[#171717]">
-      <div className="px-4 py-3 border-b border-white/10 shrink-0">
+      <div className="px-4 py-3 border-b border-white/10 shrink-0 flex items-center justify-between">
         <span className="text-sm font-semibold text-white">Mensagens</span>
+        {onClose && (
+          <button onClick={onClose} className="sm:hidden p-1.5 -mr-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors" title="Fechar">
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       <div ref={listRef} className="flex-1 overflow-y-auto p-3 space-y-2.5">
@@ -1284,7 +1408,7 @@ function ControlBar({ code, isHost, micMode, setMic, chatOpen, onToggleChat, onR
 
   return (
     <div ref={wrapRef} className="relative shrink-0 bg-[#171717] border-t border-white/10">
-      <div className="flex items-center justify-center gap-2 px-4 py-3 flex-wrap">
+      <div className="flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-3 flex-wrap">
 
         {/* Microfone */}
         <div className="relative flex">
