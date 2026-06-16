@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { evoFetch } from '@/lib/utils/evo-fetch'
+import { getPageToken, getForm, parseLead, buildLeadMessage } from '@/lib/utils/meta-lead'
 
 const VERIFY_TOKEN = process.env.META_WEBHOOK_VERIFY_TOKEN ?? ''
-const META_TOKEN   = process.env.META_ACCESS_TOKEN ?? ''
 const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE ?? ''
 
 // Grupo COMERCIAL - START SETTE
@@ -53,9 +53,15 @@ export async function POST(request: NextRequest) {
 async function processLead(leadgenId: string) {
   console.log(`[Meta Webhook] Processando lead: ${leadgenId}`)
 
-  // Busca dados do lead na API do Meta
+  const pageToken = await getPageToken()
+  if (!pageToken) {
+    console.error('[Meta Webhook] Não foi possível obter o page token')
+    return
+  }
+
+  // Busca dados do lead na API do Meta (form_id identifica qual versão do formulário)
   const res = await fetch(
-    `https://graph.facebook.com/v19.0/${leadgenId}?fields=field_data,created_time,ad_name,form_id&access_token=${META_TOKEN}`
+    `https://graph.facebook.com/v19.0/${leadgenId}?fields=field_data,created_time,form_id&access_token=${pageToken}`
   )
   if (!res.ok) {
     console.error('[Meta Webhook] Erro ao buscar lead:', await res.text())
@@ -63,62 +69,12 @@ async function processLead(leadgenId: string) {
   }
 
   const lead = await res.json()
-  const rawFields: { name: string; values: string[] }[] = lead.field_data ?? []
 
-  // Mapeia os campos por chave
-  const fields: Record<string, string> = {}
-  for (const f of rawFields) {
-    fields[f.name.toLowerCase()] = f.values?.[0] ?? ''
-  }
-
-  // Nome e telefone (campos padrão do Meta)
-  const name = fields['full_name'] ?? fields['name'] ?? 'Não informado'
-  const rawPhone = fields['phone_number'] ?? fields['whatsapp_number'] ?? fields['phone'] ?? ''
-  const phoneFormatted = formatPhone(rawPhone)
-
-  // Respostas das perguntas personalizadas
-  const answers: { question: string; answer: string }[] = []
-  const skipKeys = ['full_name', 'name', 'phone_number', 'whatsapp_number', 'phone', 'email']
-  for (const f of rawFields) {
-    if (!skipKeys.includes(f.name.toLowerCase()) && f.values?.[0]) {
-      answers.push({
-        question: toTitleCase(f.name),
-        answer: toTitleCase(f.values[0]),
-      })
-    }
-  }
-
-  // Data e hora em Brasília
-  const ts = lead.created_time ? new Date(lead.created_time).getTime() : Date.now()
-  const brtDate = new Date(ts - 3 * 60 * 60 * 1000)
-  const dateStr = brtDate.toISOString().slice(0, 10).split('-').reverse().join('/')
-  const timeStr = brtDate.toISOString().slice(11, 16) + 'h'
-
-  // ── Monta a mensagem ──────────────────────────────────────────────────────
-  const lines: string[] = [
-    '🔔 *Novo Lead Chegou!* 🔔',
-    '',
-    `👤 *Nome:* ${name}`,
-    `📱 *WhatsApp:* ${phoneFormatted}`,
-  ]
-
-  if (answers.length > 0) {
-    lines.push('')
-    lines.push('━━━━━━━━━━━━━━━━━━')
-    for (const { question, answer } of answers) {
-      lines.push(``)
-      lines.push(`📌 *${question}*`)
-      lines.push(`_${answer}_`)
-    }
-    lines.push('')
-    lines.push('━━━━━━━━━━━━━━━━━━')
-  }
-
-  lines.push('')
-  lines.push(`🕐 Recebido em ${dateStr} às ${timeStr}`)
-  lines.push(`🎯 _Formulário: Forms Estética_`)
-
-  const message = lines.join('\n')
+  // Pega nome + perguntas (com tipos) do formulário que originou o lead.
+  // Assim a mensagem sai com as perguntas ATUAIS desse formulário, seja qual for a versão.
+  const { name: formName, questions } = await getForm(lead.form_id, pageToken)
+  const parsed = parseLead(lead.field_data ?? [], questions)
+  const message = buildLeadMessage(parsed, formName, lead.created_time)
 
   // ── Envia a mensagem formatada no grupo ──────────────────────────────────
   await evoFetch.post(`/message/sendText/${EVO_INSTANCE}`, {
@@ -126,23 +82,5 @@ async function processLead(leadgenId: string) {
     text: message,
   })
 
-  console.log(`[Meta Webhook] Mensagem enviada para o grupo — Lead: ${name}`)
-}
-
-// ── Converte underscores em espaços e capitaliza ──────────────────────────────
-function toTitleCase(str: string): string {
-  return str
-    .replace(/_/g, ' ')
-    .replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .trim()
-}
-
-// ── Formata número de telefone ────────────────────────────────────────────────
-function formatPhone(raw: string): string {
-  if (!raw) return 'Não informado'
-  const digits = raw.replace(/\D/g, '')
-  const local = digits.startsWith('55') && digits.length > 11 ? digits.slice(2) : digits
-  if (local.length === 11) return `(${local.slice(0,2)}) ${local.slice(2,7)}-${local.slice(7)}`
-  if (local.length === 10) return `(${local.slice(0,2)}) ${local.slice(2,6)}-${local.slice(6)}`
-  return raw
+  console.log(`[Meta Webhook] Mensagem enviada para o grupo — Lead: ${parsed.name} | Form: ${formName}`)
 }

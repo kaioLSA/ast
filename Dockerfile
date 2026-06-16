@@ -29,6 +29,10 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Diretório persistente para estado de runtime (ex.: dedup de leads já notificados
+# no WhatsApp). É montado como volume nomeado no compose para sobreviver a deploys.
+RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
+
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000

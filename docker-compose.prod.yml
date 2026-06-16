@@ -6,6 +6,10 @@ services:
     extra_hosts:
       # permite o container acessar o serviço Whisper rodando no host da VPS
       - "host.docker.internal:host-gateway"
+    volumes:
+      # estado de runtime persistente (dedup de leads já enviados ao WhatsApp).
+      # sobrevive a `build --no-cache` e `up -d` — só some com `down -v`.
+      - crm-data:/app/data
     labels:
       - traefik.enable=true
       - traefik.http.routers.crm-startsette.rule=Host(`crm.startsette.com`)
@@ -13,3 +17,6 @@ services:
       - traefik.http.routers.crm-startsette.tls=true
       - traefik.http.routers.crm-startsette.tls.certresolver=letsencrypt
       - traefik.http.services.crm-startsette.loadbalancer.server.port=3000
+
+volumes:
+  crm-data:
